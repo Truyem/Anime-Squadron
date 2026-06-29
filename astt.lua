@@ -191,6 +191,8 @@ local DropdownSniperSyncMode = Tabs.Ingame:AddDropdown("SniperSyncMode", {
 })
 
 
+
+
 if isLobby then
     Tabs.AutoFarm:AddParagraph({ Title = "Status: LOBBY", Content = "Master Auto Farm system is ready." })
 else
@@ -421,12 +423,14 @@ else
         end
     end
     
+    local isTeleporting = false
+    
     if messageEvent then
         messageEvent.OnClientEvent:Connect(function(msg, msgType)
-            if Options.AutoLeaveToggle.Value and type(msg) == "string" then
+            if not isTeleporting and Options.AutoLeaveToggle.Value and type(msg) == "string" then
                 if string.find(msg, "cant replay this challenge") or msg == "You cant replay this challenge!" then
+                    isTeleporting = true
                     Fluent:Notify({ Title = "Auto Leave", Content = "Replay denied! Teleporting to Lobby...", Duration = 5 })
-                    task.wait(2)
                     game:GetService("TeleportService"):Teleport(71132543521245)
                 end
             end
@@ -449,7 +453,7 @@ else
                 cfg.paragraph:SetDesc(contentStr)
             end
             
-            if Options.AutoSniperSync and Options.AutoSniperSync.Value and Options.SniperSyncMode.Value == "Instant (Abort Match)" then
+            if not isTeleporting and Options.AutoSniperSync and Options.AutoSniperSync.Value and Options.SniperSyncMode.Value == "Instant (Abort Match)" then
                 local currentBoundary = math.floor(os.time() / 1800)
                 local lastCheck = 0
                 if isfile and readfile and isfile("AnimeSquadron_LastSnipeCheck.txt") then
@@ -457,8 +461,8 @@ else
                 end
                 
                 if currentBoundary > lastCheck then
+                    isTeleporting = true
                     Fluent:Notify({ Title = "Sniper Sync", Content = "New 30m window! Instant aborting to check challenges...", Duration = 5 })
-                    task.wait(2)
                     game:GetService("TeleportService"):Teleport(71132543521245)
                 end
             end
@@ -474,7 +478,7 @@ else
                 if endScreen and endScreen.Visible then
                     local shouldLeave = false
                     
-                    if Options.AutoSniperSync and Options.AutoSniperSync.Value and Options.SniperSyncMode.Value == "Safe (At EndScreen)" then
+                    if not isTeleporting and Options.AutoSniperSync and Options.AutoSniperSync.Value and Options.SniperSyncMode.Value == "Safe (At EndScreen)" then
                         local currentBoundary = math.floor(os.time() / 1800)
                         local lastCheck = 0
                         if isfile and readfile and isfile("AnimeSquadron_LastSnipeCheck.txt") then
@@ -482,25 +486,26 @@ else
                         end
                         if currentBoundary > lastCheck then
                             shouldLeave = true
+                            isTeleporting = true
                             Fluent:Notify({ Title = "Sniper Sync", Content = "New 30m window! Returning to lobby for challenges...", Duration = 5 })
                         end
                     end
                     
-                    if Options.AutoLeaveToggle.Value and targetCapStr and targetMaxCap and util and util.data and util.data.caps then
+                    if not isTeleporting and Options.AutoLeaveToggle.Value and targetCapStr and targetMaxCap and util and util.data and util.data.caps then
                         local currentVal = util.data.caps[targetCapStr] or 0
                         print("[AutoFarm] Current Limit post-match: " .. currentVal .. " / " .. targetMaxCap)
                         
                         if currentVal >= targetMaxCap then
                             shouldLeave = true
+                            isTeleporting = true
                             Fluent:Notify({ Title = "Limit Reached!", Content = "Trait Shards reached " .. currentVal .. "/" .. targetMaxCap .. ". Teleporting to Lobby!", Duration = 5 })
                         end
                     end
                     
                     if shouldLeave then
-                        task.wait(2)
                         game:GetService("TeleportService"):Teleport(71132543521245)
                         task.wait(10)
-                    elseif Options.AutoReplayToggle.Value and replayEvent then
+                    elseif not isTeleporting and Options.AutoReplayToggle.Value and replayEvent then
                         Fluent:Notify({ Title = "Auto Replay", Content = "Replaying immediately...", Duration = 3 })
                         pcall(function() replayEvent:FireServer() end)
                         task.wait(10)
