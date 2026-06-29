@@ -436,6 +436,19 @@ else
     task.spawn(function()
         while true do
             task.wait(2)
+            
+            -- Cập nhật UI cho bảng Trait Maps
+            for i, cfg in ipairs(mapConfigs) do
+                local currentCap = util and util.data and util.data.caps and util.data.caps[cfg.capStr] or 0
+                local isFull = (currentCap >= cfg.mapData.cap)
+                local prio = tonumber(Options["Priority_"..i].Value) or 0
+                
+                local contentStr = string.format("Limit: %d / %d", currentCap, cfg.mapData.cap)
+                if isFull then contentStr = contentStr .. " [FULL - SKIPPED]" end
+                if prio == 0 then contentStr = contentStr .. " [SKIPPED]" end
+                cfg.paragraph:SetDesc(contentStr)
+            end
+            
             if Options.AutoSniperSync and Options.AutoSniperSync.Value and Options.SniperSyncMode.Value == "Instant (Abort Match)" then
                 local currentBoundary = math.floor(os.time() / 1800)
                 local lastCheck = 0
