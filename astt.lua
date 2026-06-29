@@ -1,11 +1,6 @@
-if queue_on_teleport then
-    queue_on_teleport([[
-        pcall(function()
-            loadfile("d:/Script/AnimeSquadronUniversal.lua")()
-        end)
-    ]])
+if not game:IsLoaded() then
+    game.Loaded:Wait()
 end
-
 local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
 local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
 local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
@@ -180,15 +175,25 @@ Tabs.Ingame:AddParagraph({ Title = "Ingame Utilities", Content = "Only active du
 local ToggleLeave = Tabs.Ingame:AddToggle("AutoLeaveToggle", { Title = "ENABLE Auto Leave to Lobby", Default = false })
 local ToggleReplay = Tabs.Ingame:AddToggle("AutoReplayToggle", { Title = "ENABLE Auto Replay", Default = false })
 
+Tabs.Ingame:AddParagraph({ Title = "Challenge Sniper Sync", Content = "Automatically return to lobby around XX:00 and XX:30 to check new challenges." })
+local ToggleSniperSync = Tabs.Ingame:AddToggle("AutoSniperSync", { Title = "ENABLE Sniper Sync", Default = false })
+local DropdownSniperSyncMode = Tabs.Ingame:AddDropdown("SniperSyncMode", {
+    Title = "Sync Mode",
+    Values = {"Safe (At EndScreen)", "Instant (Abort Match)"},
+    Multi = false,
+    Default = 1,
+})
+
+
 if isLobby then
-    Tabs.AutoFarm:AddParagraph({ Title = "Status: LOBBY", Content = "Auto Farm system is ready." })
+    Tabs.AutoFarm:AddParagraph({ Title = "Status: LOBBY", Content = "Master Auto Farm system is ready." })
 else
     Tabs.AutoFarm:AddParagraph({ Title = "Status: INGAME", Content = "NOTE: Auto Farm functions will NOT operate while in-game. It will resume automatically in the Lobby." })
 end
 local friendToggle = Tabs.AutoFarm:AddToggle("FriendsOnly", { Title = "Friends Only", Default = true })
 local AutoClaimDaily = Tabs.AutoFarm:AddToggle("AutoClaimDaily", { Title = "Auto Claim Daily Rewards", Default = false })
 local AutoClaimBundle = Tabs.AutoFarm:AddToggle("AutoClaimBundle", { Title = "Auto Claim Free Bundle", Default = false })
-local AutoToggle = Tabs.AutoFarm:AddToggle("MasterAutoRun", { Title = "ENABLE AUTO FARM", Default = false })
+local AutoToggle = Tabs.AutoFarm:AddToggle("MasterAutoRun", { Title = "ENABLE MASTER AUTO FARM", Default = false })
 
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
@@ -320,6 +325,10 @@ if isLobby then
                 local joinedSomething = false
                 
                 if succ and type(challengeData) == "table" then
+                    if isfile and writefile then
+                        pcall(function() writefile("AnimeSquadron_LastSnipeCheck.txt", tostring(math.floor(os.time() / 1800))) end)
+                    end
+                    
                     if Options.AutoJoin1d.Value and challengeData["1d"] then
                         local chData = challengeData["1d"]
                         if chData.world ~= lastDailyWorld or chData.act ~= lastDailyAct then
@@ -421,11 +430,42 @@ else
     task.spawn(function()
         while true do
             task.wait(2)
+            if Options.AutoSniperSync and Options.AutoSniperSync.Value and Options.SniperSyncMode.Value == "Instant (Abort Match)" then
+                local currentBoundary = math.floor(os.time() / 1800)
+                local lastCheck = 0
+                if isfile and readfile and isfile("AnimeSquadron_LastSnipeCheck.txt") then
+                    pcall(function() lastCheck = tonumber(readfile("AnimeSquadron_LastSnipeCheck.txt")) or 0 end)
+                end
+                
+                if currentBoundary > lastCheck then
+                    Fluent:Notify({ Title = "Sniper Sync", Content = "New 30m window! Instant aborting to check challenges...", Duration = 5 })
+                    task.wait(2)
+                    game:GetService("TeleportService"):Teleport(71132543521245)
+                end
+            end
+        end
+    end)
+    
+    task.spawn(function()
+        while true do
+            task.wait(2)
             local menus = Players.LocalPlayer.PlayerGui:FindFirstChild("Menus")
             if menus then
                 local endScreen = menus:FindFirstChild("EndScreen")
                 if endScreen and endScreen.Visible then
                     local shouldLeave = false
+                    
+                    if Options.AutoSniperSync and Options.AutoSniperSync.Value and Options.SniperSyncMode.Value == "Safe (At EndScreen)" then
+                        local currentBoundary = math.floor(os.time() / 1800)
+                        local lastCheck = 0
+                        if isfile and readfile and isfile("AnimeSquadron_LastSnipeCheck.txt") then
+                            pcall(function() lastCheck = tonumber(readfile("AnimeSquadron_LastSnipeCheck.txt")) or 0 end)
+                        end
+                        if currentBoundary > lastCheck then
+                            shouldLeave = true
+                            Fluent:Notify({ Title = "Sniper Sync", Content = "New 30m window! Returning to lobby for challenges...", Duration = 5 })
+                        end
+                    end
                     
                     if Options.AutoLeaveToggle.Value and targetCapStr and targetMaxCap and util and util.data and util.data.caps then
                         local currentVal = util.data.caps[targetCapStr] or 0
@@ -451,3 +491,82 @@ else
         end
     end)
 end
+
+local function createMobileToggle()
+    local guiParent = pcall(function() return gethui() end) and gethui() or game:GetService("CoreGui")
+    if not pcall(function() local _ = guiParent.Name end) then
+        guiParent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
+    end
+    if guiParent:FindFirstChild("FluentMobileToggle") then return end
+
+    local ScreenGui = Instance.new("ScreenGui")
+    ScreenGui.Name = "FluentMobileToggle"
+    ScreenGui.Parent = guiParent
+    ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+
+    local ToggleBtn = Instance.new("ImageButton")
+    ToggleBtn.Name = "ToggleBtn"
+    ToggleBtn.Parent = ScreenGui
+    ToggleBtn.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+    ToggleBtn.BackgroundTransparency = 0.3
+    ToggleBtn.Position = UDim2.new(0, 50, 0, 50)
+    ToggleBtn.Size = UDim2.new(0, 45, 0, 45)
+    
+    local UICorner = Instance.new("UICorner")
+    UICorner.CornerRadius = UDim.new(0, 10)
+    UICorner.Parent = ToggleBtn
+
+    local UIStroke = Instance.new("UIStroke")
+    UIStroke.Color = Color3.fromRGB(60, 60, 60)
+    UIStroke.Thickness = 1.5
+    UIStroke.Parent = ToggleBtn
+
+    local Icon = Instance.new("ImageLabel")
+    Icon.Name = "Icon"
+    Icon.Parent = ToggleBtn
+    Icon.BackgroundTransparency = 1
+    Icon.Position = UDim2.new(0.5, -12, 0.5, -12)
+    Icon.Size = UDim2.new(0, 24, 0, 24)
+    Icon.Image = "rbxassetid://10734900011"
+    
+    local dragging = false
+    local dragInput, dragStart, startPos
+
+    ToggleBtn.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = ToggleBtn.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+
+    ToggleBtn.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+            dragInput = input
+        end
+    end)
+
+    local UserInputService = game:GetService("UserInputService")
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            local delta = input.Position - dragStart
+            ToggleBtn.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+
+    ToggleBtn.MouseButton1Click:Connect(function()
+        local vim = game:GetService("VirtualInputManager")
+        if vim then
+            vim:SendKeyEvent(true, Enum.KeyCode.LeftControl, false, game)
+            task.wait()
+            vim:SendKeyEvent(false, Enum.KeyCode.LeftControl, false, game)
+        end
+    end)
+end
+createMobileToggle()
