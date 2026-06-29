@@ -172,7 +172,7 @@ else
 end
 
 Tabs.Ingame:AddParagraph({ Title = "Ingame Utilities", Content = "Only active during a match." })
-local ToggleLeave = Tabs.Ingame:AddToggle("AutoLeaveToggle", { Title = "ENABLE Auto Leave to Lobby", Default = false })
+local ToggleLeave = Tabs.Ingame:AddToggle("AutoLeaveToggle", { Title = "ENABLE Auto Leave (On Max Limit/Cant Replay)", Default = false })
 local ToggleReplay = Tabs.Ingame:AddToggle("AutoReplayToggle", { Title = "ENABLE Auto Replay", Default = false })
 
 Tabs.Ingame:AddParagraph({ Title = "Challenge Sniper Sync", Content = "Automatically return to lobby around XX:00 and XX:30 to check new challenges." })
