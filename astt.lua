@@ -8,6 +8,12 @@ local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
+local VirtualUser = game:GetService("VirtualUser")
+
+Players.LocalPlayer.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
 
 local LobbyID = 71132543521245
 local isLobby = (game.PlaceId == LobbyID)
