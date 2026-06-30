@@ -198,6 +198,67 @@ if isLobby then
 else
     Tabs.AutoFarm:AddParagraph({ Title = "Status: INGAME", Content = "NOTE: Auto Farm functions will NOT operate while in-game. It will resume automatically in the Lobby." })
 end
+
+local SessionStats = {
+    Date = os.date("%Y-%m-%d"),
+    Matches = 0,
+    TraitShards = 0, PerfectCubes = 0, RerollCubes = 0,
+    StartTrait = -1, StartPerfect = -1, StartReroll = -1
+}
+
+local StatsParagraph = Tabs.AutoFarm:AddParagraph({
+    Title = "Session Stats (Farmed Today)",
+    Content = "Matches Played: 0\nTrait Shards: 0 + 0\nPerfect Cubes: 0 + 0\nReroll Cubes: 0 + 0"
+})
+
+local function saveSessionStats()
+    if writefile then
+        pcall(function() writefile("AnimeSquadron_DailyStats.json", game:GetService("HttpService"):JSONEncode(SessionStats)) end)
+    end
+end
+
+local function updateStatsUI()
+    if StatsParagraph then
+        local t_base = SessionStats.StartTrait == -1 and 0 or SessionStats.StartTrait
+        local p_base = SessionStats.StartPerfect == -1 and 0 or SessionStats.StartPerfect
+        local r_base = SessionStats.StartReroll == -1 and 0 or SessionStats.StartReroll
+        StatsParagraph:SetDesc(string.format("Matches Played: %d\nTrait Shards: %d + %d\nPerfect Cubes: %d + %d\nReroll Cubes: %d + %d", SessionStats.Matches, t_base, SessionStats.TraitShards, p_base, SessionStats.PerfectCubes, r_base, SessionStats.RerollCubes))
+    end
+end
+
+local function resetSessionStats()
+    SessionStats.Matches = 0
+    SessionStats.TraitShards = 0
+    SessionStats.PerfectCubes = 0
+    SessionStats.RerollCubes = 0
+    SessionStats.StartTrait = -1
+    SessionStats.StartPerfect = -1
+    SessionStats.StartReroll = -1
+    SessionStats.Date = os.date("%Y-%m-%d")
+    saveSessionStats()
+    updateStatsUI()
+end
+
+local function loadSessionStats()
+    if isfile and readfile and isfile("AnimeSquadron_DailyStats.json") then
+        local s, res = pcall(function() return game:GetService("HttpService"):JSONDecode(readfile("AnimeSquadron_DailyStats.json")) end)
+        if s and type(res) == "table" then
+            if res.Date == os.date("%Y-%m-%d") then
+                SessionStats.Matches = res.Matches or 0
+                SessionStats.TraitShards = res.TraitShards or 0
+                SessionStats.PerfectCubes = res.PerfectCubes or 0
+                SessionStats.RerollCubes = res.RerollCubes or 0
+                SessionStats.StartTrait = res.StartTrait or -1
+                SessionStats.StartPerfect = res.StartPerfect or -1
+                SessionStats.StartReroll = res.StartReroll or -1
+                updateStatsUI()
+            else
+                resetSessionStats()
+            end
+        end
+    end
+end
+loadSessionStats()
 local friendToggle = Tabs.AutoFarm:AddToggle("FriendsOnly", { Title = "Friends Only", Default = true })
 local AutoClaimDaily = Tabs.AutoFarm:AddToggle("AutoClaimDaily", { Title = "Auto Claim Daily Rewards", Default = false })
 local AutoClaimBundle = Tabs.AutoFarm:AddToggle("AutoClaimBundle", { Title = "Auto Claim Free Bundle", Default = false })
@@ -357,7 +418,10 @@ if isLobby then
                             local s, err = joinRoom(chData.act, "1d", "Challenge", chData.world, chData.rewards, nil, nil)
                             if not s then
                                 if err == "Already completed!" then
-                                    dailyCompleted = true
+                                    if not dailyCompleted then
+                                        dailyCompleted = true
+                                        resetSessionStats()
+                                    end
                                 end
                             else
                                 joinedSomething = true
@@ -473,7 +537,7 @@ else
         while true do
             task.wait(2)
             
-            -- Cập nhật UI cho bảng Trait Maps
+            
             for i, cfg in ipairs(mapConfigs) do
                 local currentCap = util and util.data and util.data.caps and util.data.caps[cfg.capStr] or 0
                 local isFull = (currentCap >= cfg.mapData.cap)
@@ -507,19 +571,25 @@ else
             if menus then
                 local endScreen = menus:FindFirstChild("EndScreen")
                 if endScreen and endScreen.Visible then
-                    if not webhookSentForMatch and Options.WebhookOnMatchEnd and Options.WebhookOnMatchEnd.Value and type(sendWebhookData) == "function" then
+                    if not webhookSentForMatch then
                         webhookSentForMatch = true
-                        local matchStatus = "WIN"
-                        for _, child in pairs(endScreen:GetDescendants()) do
-                            if child:IsA("TextLabel") then
-                                local text = string.lower(child.Text)
-                                if string.find(text, "defeat") or string.find(text, "lose") or string.find(text, "fail") then
-                                    matchStatus = "LOSS"
-                                    break
+                        SessionStats.Matches = SessionStats.Matches + 1
+                        saveSessionStats()
+                        updateStatsUI()
+                        
+                        if Options.WebhookOnMatchEnd and Options.WebhookOnMatchEnd.Value and type(sendWebhookData) == "function" then
+                            local matchStatus = "WIN"
+                            for _, child in pairs(endScreen:GetDescendants()) do
+                                if child:IsA("TextLabel") then
+                                    local text = string.lower(child.Text)
+                                    if string.find(text, "defeat") or string.find(text, "lose") or string.find(text, "fail") then
+                                        matchStatus = "LOSS"
+                                        break
+                                    end
                                 end
                             end
+                            sendWebhookData(matchStatus)
                         end
-                        sendWebhookData(matchStatus)
                     end
                     
                     if not isTeleporting and Options.AutoSniperSync and Options.AutoSniperSync.Value and Options.SniperSyncMode.Value == "Safe (At EndScreen)" then
@@ -554,7 +624,7 @@ else
         end
     end)
 end
-local function sendWebhookData(status)
+local function sendWebhookData(status, diffs)
     if WebhookURL.Value == "" then return false, "No URL configured" end
     
     local util
@@ -566,6 +636,26 @@ local function sendWebhookData(status)
     local traitShards = util and util.data and util.data.stats and util.data.stats["Trait Shards"] or 0
     local perfectCubes = util and util.data and util.data.stats and util.data.stats["Perfect Cubes"] or 0
     local rerollCubes = util and util.data and util.data.stats and util.data.stats["Reroll Cubes"] or 0
+    
+    local strTrait = tostring(traitShards)
+    local strPerfect = tostring(perfectCubes)
+    local strReroll = tostring(rerollCubes)
+    local droppedItems = {}
+    
+    if status == "DROP" and type(diffs) == "table" then
+        if diffs.trait and diffs.trait > 0 then
+            table.insert(droppedItems, "Trait Shards +" .. diffs.trait)
+            strTrait = tostring(traitShards - diffs.trait) .. " + " .. diffs.trait
+        end
+        if diffs.perfect and diffs.perfect > 0 then
+            table.insert(droppedItems, "Perfect Cubes +" .. diffs.perfect)
+            strPerfect = tostring(perfectCubes - diffs.perfect) .. " + " .. diffs.perfect
+        end
+        if diffs.reroll and diffs.reroll > 0 then
+            table.insert(droppedItems, "Reroll Cubes +" .. diffs.reroll)
+            strReroll = tostring(rerollCubes - diffs.reroll) .. " + " .. diffs.reroll
+        end
+    end
     
     local mapName = "Lobby"
     if game.PlaceId ~= 71132543521245 then
@@ -586,6 +676,9 @@ local function sendWebhookData(status)
     elseif status == "DROP" then
         embedColor = 65280
         statusText = "Item Dropped!"
+        if #droppedItems > 0 then
+            statusText = "Item Dropped! (" .. table.concat(droppedItems, ", ") .. ")"
+        end
     end
     
     local playerName = game.Players.LocalPlayer.Name
@@ -601,9 +694,9 @@ local function sendWebhookData(status)
             { name = "🗺️ Map", value = mapName, inline = true },
             { name = "<:Gems:1521405276127760434> Gems", value = tostring(gems), inline = true },
             { name = "<:Gold:1521405249988989008> Gold", value = tostring(gold), inline = true },
-            { name = "<:TraitShards:1521405216346607697> Trait Shards", value = tostring(traitShards), inline = true },
-            { name = "<:PerfectCubes:1521405365416099950> Perfect Cubes", value = tostring(perfectCubes), inline = true },
-            { name = "<:RerollCubes:1521405341667954789> Reroll Cubes", value = tostring(rerollCubes), inline = true },
+            { name = "<:TraitShards:1521405216346607697> Trait Shards", value = strTrait, inline = true },
+            { name = "<:PerfectCubes:1521405365416099950> Perfect Cubes", value = strPerfect, inline = true },
+            { name = "<:RerollCubes:1521405341667954789> Reroll Cubes", value = strReroll, inline = true },
             { name = "📊 Status", value = statusText, inline = true }
         },
         footer = { text = "Universal Auto Farm • " .. os.date("%Y-%m-%d %H:%M:%S") }
@@ -675,23 +768,46 @@ task.spawn(function()
     local lastTrait, lastPerfect, lastReroll = -1, -1, -1
     while true do
         task.wait(5)
-        if Options.WebhookOnDrop and Options.WebhookOnDrop.Value and Options.WebhookURL and Options.WebhookURL.Value ~= "" then
-            pcall(function() util = require(game:GetService("Players").LocalPlayer.PlayerScripts.Client.Utility) end)
-            if util and util.data and util.data.stats then
-                local currentTrait = util.data.stats["Trait Shards"] or 0
-                local currentPerfect = util.data.stats["Perfect Cubes"] or 0
-                local currentReroll = util.data.stats["Reroll Cubes"] or 0
+        pcall(function() util = require(game:GetService("Players").LocalPlayer.PlayerScripts.Client.Utility) end)
+        if util and util.data and util.data.stats then
+            local currentTrait = util.data.stats["Trait Shards"] or 0
+            local currentPerfect = util.data.stats["Perfect Cubes"] or 0
+            local currentReroll = util.data.stats["Reroll Cubes"] or 0
+            
+            if lastTrait ~= -1 and lastPerfect ~= -1 and lastReroll ~= -1 then
+                if SessionStats.StartTrait == -1 then
+                    SessionStats.StartTrait = currentTrait
+                    SessionStats.StartPerfect = currentPerfect
+                    SessionStats.StartReroll = currentReroll
+                    saveSessionStats()
+                    updateStatsUI()
+                end
                 
-                if lastTrait ~= -1 and lastPerfect ~= -1 and lastReroll ~= -1 then
-                    if currentTrait > lastTrait or currentPerfect > lastPerfect or currentReroll > lastReroll then
-                        sendWebhookData("DROP")
+                local diffTrait = currentTrait - lastTrait
+                local diffPerfect = currentPerfect - lastPerfect
+                local diffReroll = currentReroll - lastReroll
+                
+                if diffTrait > 0 or diffPerfect > 0 or diffReroll > 0 then
+                    SessionStats.TraitShards = SessionStats.TraitShards + (diffTrait > 0 and diffTrait or 0)
+                    SessionStats.PerfectCubes = SessionStats.PerfectCubes + (diffPerfect > 0 and diffPerfect or 0)
+                    SessionStats.RerollCubes = SessionStats.RerollCubes + (diffReroll > 0 and diffReroll or 0)
+                    
+                    saveSessionStats()
+                    updateStatsUI()
+                    
+                    if Options.WebhookOnDrop and Options.WebhookOnDrop.Value and Options.WebhookURL and Options.WebhookURL.Value ~= "" then
+                        sendWebhookData("DROP", {
+                            trait = diffTrait,
+                            perfect = diffPerfect,
+                            reroll = diffReroll
+                        })
                         task.wait(10)
                     end
                 end
-                lastTrait = currentTrait
-                lastPerfect = currentPerfect
-                lastReroll = currentReroll
             end
+            lastTrait = currentTrait
+            lastPerfect = currentPerfect
+            lastReroll = currentReroll
         end
     end
 end)
