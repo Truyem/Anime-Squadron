@@ -418,10 +418,7 @@ if isLobby then
                             local s, err = joinRoom(chData.act, "1d", "Challenge", chData.world, chData.rewards, nil, nil)
                             if not s then
                                 if err == "Already completed!" then
-                                    if not dailyCompleted then
-                                        dailyCompleted = true
-                                        resetSessionStats()
-                                    end
+                                    dailyCompleted = true
                                 end
                             else
                                 joinedSomething = true
