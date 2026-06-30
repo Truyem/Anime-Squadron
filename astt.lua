@@ -85,6 +85,7 @@ local Tabs = {
     Sniper = Window:AddTab({ Title = "Challenge Sniper", Icon = "target" }),
     Maps = Window:AddTab({ Title = "Trait Maps", Icon = "map" }),
     Ingame = Window:AddTab({ Title = "Ingame Helper", Icon = "swords" }),
+    Webhook = Window:AddTab({ Title = "Webhook", Icon = "link" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
 }
 
@@ -201,6 +202,13 @@ local friendToggle = Tabs.AutoFarm:AddToggle("FriendsOnly", { Title = "Friends O
 local AutoClaimDaily = Tabs.AutoFarm:AddToggle("AutoClaimDaily", { Title = "Auto Claim Daily Rewards", Default = false })
 local AutoClaimBundle = Tabs.AutoFarm:AddToggle("AutoClaimBundle", { Title = "Auto Claim Free Bundle", Default = false })
 local AutoToggle = Tabs.AutoFarm:AddToggle("MasterAutoRun", { Title = "ENABLE MASTER AUTO FARM", Default = false })
+
+Tabs.Webhook:AddParagraph({ Title = "Discord Webhook", Content = "Automatic status reporter" })
+local WebhookURL = Tabs.Webhook:AddInput("WebhookURL", { Title = "Webhook URL", Default = "", Numeric = false, Finished = false, Placeholder = "https://discord.com/api/webhooks/..." })
+local WebhookOnDrop = Tabs.Webhook:AddToggle("WebhookOnDrop", { Title = "Send on Item Drop (Traits/Cubes)", Default = false })
+local WebhookOnMatchEnd = Tabs.Webhook:AddToggle("WebhookOnMatchEnd", { Title = "Send on Match End (Win/Loss)", Default = false })
+local WebhookOnInterval = Tabs.Webhook:AddToggle("WebhookOnInterval", { Title = "Send on Interval", Default = false })
+local WebhookInterval = Tabs.Webhook:AddSlider("WebhookInterval", { Title = "Interval (Minutes)", Description = "How often to send", Default = 10, Min = 1, Max = 60, Rounding = 0 })
 
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
@@ -491,6 +499,7 @@ else
         end
     end)
     
+    local webhookSentForMatch = false
     task.spawn(function()
         while true do
             task.wait(2)
@@ -498,6 +507,21 @@ else
             if menus then
                 local endScreen = menus:FindFirstChild("EndScreen")
                 if endScreen and endScreen.Visible then
+                    if not webhookSentForMatch and Options.WebhookOnMatchEnd and Options.WebhookOnMatchEnd.Value and type(sendWebhookData) == "function" then
+                        webhookSentForMatch = true
+                        local matchStatus = "WIN"
+                        for _, child in pairs(endScreen:GetDescendants()) do
+                            if child:IsA("TextLabel") then
+                                local text = string.lower(child.Text)
+                                if string.find(text, "defeat") or string.find(text, "lose") or string.find(text, "fail") then
+                                    matchStatus = "LOSS"
+                                    break
+                                end
+                            end
+                        end
+                        sendWebhookData(matchStatus)
+                    end
+                    
                     if not isTeleporting and Options.AutoSniperSync and Options.AutoSniperSync.Value and Options.SniperSyncMode.Value == "Safe (At EndScreen)" then
                         local currentBoundary = math.floor(os.time() / 1800)
                         local lastCheck = 0
@@ -523,11 +547,154 @@ else
                         pcall(function() replayEvent:FireServer() end)
                         task.wait(10)
                     end
+                else
+                    webhookSentForMatch = false
                 end
             end
         end
     end)
 end
+local function sendWebhookData(status)
+    if WebhookURL.Value == "" then return false, "No URL configured" end
+    
+    local util
+    pcall(function() util = require(game:GetService("Players").LocalPlayer.PlayerScripts.Client.Utility) end)
+    
+    local gems = util and util.data and util.data.stats and util.data.stats.Gems or 0
+    local gold = util and util.data and util.data.stats and util.data.stats.Gold or 0
+    local level = util and util.data and util.data.stats and util.data.stats.level or 0
+    local traitShards = util and util.data and util.data.stats and util.data.stats["Trait Shards"] or 0
+    local perfectCubes = util and util.data and util.data.stats and util.data.stats["Perfect Cubes"] or 0
+    local rerollCubes = util and util.data and util.data.stats and util.data.stats["Reroll Cubes"] or 0
+    
+    local mapName = "Lobby"
+    if game.PlaceId ~= 71132543521245 then
+        local mode = util and util.data and util.data.ingame and util.data.ingame.mode or "Unknown"
+        local world = util and util.data and util.data.ingame and util.data.ingame.world or "Map"
+        local act = util and util.data and util.data.ingame and util.data.ingame.act or "1"
+        mapName = string.format("%s (Act %s) [%s]", world, tostring(act), mode)
+    end
+
+    local embedColor = 16776960
+    local statusText = "Idle (Checking...)"
+    if status == "WIN" then 
+        embedColor = 65280
+        statusText = "Victory"
+    elseif status == "LOSS" then 
+        embedColor = 16711680
+        statusText = "Defeat"
+    elseif status == "DROP" then
+        embedColor = 65280
+        statusText = "Item Dropped!"
+    end
+    
+    local playerName = game.Players.LocalPlayer.Name
+    local gameIconUrl = "https://tr.rbxcdn.com/180DAY-d29acf5020ecef8a89736cb5f23d934c/512/512/Image/Png/noFilter"
+    
+    local embed = {
+        title = "Anime Squadron - Auto Farm Update",
+        color = embedColor,
+        thumbnail = { url = gameIconUrl },
+        fields = {
+            { name = "👤 Player", value = playerName, inline = true },
+            { name = "⭐ Level", value = tostring(level), inline = true },
+            { name = "🗺️ Map", value = mapName, inline = true },
+            { name = "<:Gems:1521405276127760434> Gems", value = tostring(gems), inline = true },
+            { name = "<:Gold:1521405249988989008> Gold", value = tostring(gold), inline = true },
+            { name = "<:TraitShards:1521405216346607697> Trait Shards", value = tostring(traitShards), inline = true },
+            { name = "<:PerfectCubes:1521405365416099950> Perfect Cubes", value = tostring(perfectCubes), inline = true },
+            { name = "<:RerollCubes:1521405341667954789> Reroll Cubes", value = tostring(rerollCubes), inline = true },
+            { name = "📊 Status", value = statusText, inline = true }
+        },
+        footer = { text = "Universal Auto Farm • " .. os.date("%Y-%m-%d %H:%M:%S") }
+    }
+    
+    local msg = {
+        username = "Anime Squadron",
+        avatar_url = gameIconUrl,
+        embeds = { embed }
+    }
+    
+    local req = nil
+    if type(http_request) == "function" then req = http_request
+    elseif type(request) == "function" then req = request
+    elseif type(syn) == "table" and type(syn.request) == "function" then req = syn.request
+    elseif type(fluxus) == "table" and type(fluxus.request) == "function" then req = fluxus.request end
+    
+    if req then
+        local success, res = pcall(function()
+            return req({
+                Url = WebhookURL.Value,
+                Method = "POST",
+                Headers = { ["Content-Type"] = "application/json" },
+                Body = HttpService:JSONEncode(msg)
+            })
+        end)
+        return success, res
+    else
+        return false, "Executor does not support HTTP requests"
+    end
+end
+
+Tabs.Webhook:AddButton({
+    Title = "Test Send Webhook",
+    Description = "Send a test message now",
+    Callback = function()
+        Fluent:Notify({ Title = "Webhook", Content = "Sending...", Duration = 2 })
+        local success, err = sendWebhookData("INTERVAL")
+        if success then
+            Fluent:Notify({ Title = "Webhook", Content = "Sent successfully!", Duration = 3 })
+        else
+            Fluent:Notify({ Title = "Webhook Error", Content = tostring(err), Duration = 5 })
+        end
+    end
+})
+
+task.spawn(function()
+    while true do
+        task.wait(60)
+        if Options.WebhookOnInterval and Options.WebhookOnInterval.Value and Options.WebhookURL and Options.WebhookURL.Value ~= "" then
+            local interval = tonumber(Options.WebhookInterval.Value) or 10
+            local lastSend = 0
+            if isfile and readfile and isfile("AnimeSquadron_LastWebhook.txt") then
+                pcall(function() lastSend = tonumber(readfile("AnimeSquadron_LastWebhook.txt")) or 0 end)
+            end
+            
+            if os.time() - lastSend >= (interval * 60) then
+                local success = sendWebhookData("INTERVAL")
+                if success and writefile then
+                    pcall(function() writefile("AnimeSquadron_LastWebhook.txt", tostring(os.time())) end)
+                end
+            end
+        end
+    end
+end)
+
+task.spawn(function()
+    local util
+    local lastTrait, lastPerfect, lastReroll = -1, -1, -1
+    while true do
+        task.wait(5)
+        if Options.WebhookOnDrop and Options.WebhookOnDrop.Value and Options.WebhookURL and Options.WebhookURL.Value ~= "" then
+            pcall(function() util = require(game:GetService("Players").LocalPlayer.PlayerScripts.Client.Utility) end)
+            if util and util.data and util.data.stats then
+                local currentTrait = util.data.stats["Trait Shards"] or 0
+                local currentPerfect = util.data.stats["Perfect Cubes"] or 0
+                local currentReroll = util.data.stats["Reroll Cubes"] or 0
+                
+                if lastTrait ~= -1 and lastPerfect ~= -1 and lastReroll ~= -1 then
+                    if currentTrait > lastTrait or currentPerfect > lastPerfect or currentReroll > lastReroll then
+                        sendWebhookData("DROP")
+                        task.wait(10)
+                    end
+                end
+                lastTrait = currentTrait
+                lastPerfect = currentPerfect
+                lastReroll = currentReroll
+            end
+        end
+    end
+end)
 
 local function createMobileToggle()
     local guiParent = pcall(function() return gethui() end) and gethui() or game:GetService("CoreGui")
