@@ -425,13 +425,30 @@ else
     
     local isTeleporting = false
     
+    local function forceTeleportToLobby(notifyTitle, notifyContent)
+        if isTeleporting then return end
+        isTeleporting = true
+        if notifyTitle and notifyContent then
+            Fluent:Notify({ Title = notifyTitle, Content = notifyContent, Duration = 5 })
+        end
+        task.spawn(function()
+            while true do
+                local success, err = pcall(function()
+                    game:GetService("TeleportService"):Teleport(71132543521245)
+                end)
+                if not success then
+                    warn("[AutoFarm] Lỗi Teleport: " .. tostring(err))
+                end
+                task.wait(5)
+            end
+        end)
+    end
+    
     if messageEvent then
         messageEvent.OnClientEvent:Connect(function(msg, msgType)
             if not isTeleporting and Options.AutoLeaveToggle.Value and type(msg) == "string" then
                 if string.find(msg, "cant replay this challenge") or msg == "You cant replay this challenge!" then
-                    isTeleporting = true
-                    Fluent:Notify({ Title = "Auto Leave", Content = "Replay denied! Teleporting to Lobby...", Duration = 5 })
-                    game:GetService("TeleportService"):Teleport(71132543521245)
+                    forceTeleportToLobby("Auto Leave", "Replay denied! Teleporting to Lobby...")
                 end
             end
         end)
@@ -461,9 +478,7 @@ else
                 end
                 
                 if currentBoundary > lastCheck then
-                    isTeleporting = true
-                    Fluent:Notify({ Title = "Sniper Sync", Content = "New 30m window! Instant aborting to check challenges...", Duration = 5 })
-                    game:GetService("TeleportService"):Teleport(71132543521245)
+                    forceTeleportToLobby("Sniper Sync", "New 30m window! Instant aborting to check challenges...")
                 end
             end
         end
@@ -476,8 +491,6 @@ else
             if menus then
                 local endScreen = menus:FindFirstChild("EndScreen")
                 if endScreen and endScreen.Visible then
-                    local shouldLeave = false
-                    
                     if not isTeleporting and Options.AutoSniperSync and Options.AutoSniperSync.Value and Options.SniperSyncMode.Value == "Safe (At EndScreen)" then
                         local currentBoundary = math.floor(os.time() / 1800)
                         local lastCheck = 0
@@ -485,9 +498,7 @@ else
                             pcall(function() lastCheck = tonumber(readfile("AnimeSquadron_LastSnipeCheck.txt")) or 0 end)
                         end
                         if currentBoundary > lastCheck then
-                            shouldLeave = true
-                            isTeleporting = true
-                            Fluent:Notify({ Title = "Sniper Sync", Content = "New 30m window! Returning to lobby for challenges...", Duration = 5 })
+                            forceTeleportToLobby("Sniper Sync", "New 30m window! Returning to lobby for challenges...")
                         end
                     end
                     
@@ -496,16 +507,11 @@ else
                         print("[AutoFarm] Current Limit post-match: " .. currentVal .. " / " .. targetMaxCap)
                         
                         if currentVal >= targetMaxCap then
-                            shouldLeave = true
-                            isTeleporting = true
-                            Fluent:Notify({ Title = "Limit Reached!", Content = "Trait Shards reached " .. currentVal .. "/" .. targetMaxCap .. ". Teleporting to Lobby!", Duration = 5 })
+                            forceTeleportToLobby("Limit Reached!", "Trait Shards reached " .. currentVal .. "/" .. targetMaxCap .. ". Teleporting to Lobby!")
                         end
                     end
                     
-                    if shouldLeave then
-                        game:GetService("TeleportService"):Teleport(71132543521245)
-                        task.wait(10)
-                    elseif not isTeleporting and Options.AutoReplayToggle.Value and replayEvent then
+                    if not isTeleporting and Options.AutoReplayToggle.Value and replayEvent then
                         Fluent:Notify({ Title = "Auto Replay", Content = "Replaying immediately...", Duration = 3 })
                         pcall(function() replayEvent:FireServer() end)
                         task.wait(10)
