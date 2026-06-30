@@ -190,8 +190,23 @@ local DropdownSniperSyncMode = Tabs.Ingame:AddDropdown("SniperSyncMode", {
     Default = 1,
 })
 
-
-
+Tabs.Ingame:AddButton({
+    Title = "Test Leave To Lobby",
+    Description = "Force teleport to Lobby via Game Remote",
+    Callback = function()
+        local teleportRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+        if teleportRemote then teleportRemote = teleportRemote:FindFirstChild("Players") end
+        if teleportRemote then teleportRemote = teleportRemote:FindFirstChild("teleport") end
+        
+        if teleportRemote and teleportRemote:IsA("RemoteEvent") then
+            Fluent:Notify({ Title = "Test Leave", Content = "Đang gửi lệnh về sảnh...", Duration = 3 })
+            teleportRemote:FireServer()
+        else
+            warn("[AutoFarm] Lỗi: Không tìm thấy RemoteEvent teleport!")
+            Fluent:Notify({ Title = "Lỗi", Content = "Không tìm thấy Remote của game!", Duration = 3 })
+        end
+    end
+})
 
 if isLobby then
     Tabs.AutoFarm:AddParagraph({ Title = "Status: LOBBY", Content = "Master Auto Farm system is ready." })
@@ -434,7 +449,15 @@ else
         task.spawn(function()
             while true do
                 local success, err = pcall(function()
-                    game:GetService("TeleportService"):Teleport(71132543521245)
+                    local teleportRemote = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+                    if teleportRemote then teleportRemote = teleportRemote:FindFirstChild("Players") end
+                    if teleportRemote then teleportRemote = teleportRemote:FindFirstChild("teleport") end
+                    
+                    if teleportRemote and teleportRemote:IsA("RemoteEvent") then
+                        teleportRemote:FireServer()
+                    else
+                        warn("[AutoFarm] Không tìm thấy RemoteEvent teleport của game!")
+                    end
                 end)
                 if not success then
                     warn("[AutoFarm] Lỗi Teleport: " .. tostring(err))
