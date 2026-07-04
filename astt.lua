@@ -785,9 +785,9 @@ task.spawn(function()
                 local diffReroll = currentReroll - lastReroll
                 
                 if diffTrait > 0 or diffPerfect > 0 or diffReroll > 0 then
-                    SessionStats.TraitShards = SessionStats.TraitShards + (diffTrait > 0 and diffTrait or 0)
-                    SessionStats.PerfectCubes = SessionStats.PerfectCubes + (diffPerfect > 0 and diffPerfect or 0)
-                    SessionStats.RerollCubes = SessionStats.RerollCubes + (diffReroll > 0 and diffReroll or 0)
+                    if diffTrait > 0 then SessionStats.TraitShards = SessionStats.TraitShards + diffTrait end
+                    if diffPerfect > 0 then SessionStats.PerfectCubes = SessionStats.PerfectCubes + diffPerfect end
+                    if diffReroll > 0 then SessionStats.RerollCubes = SessionStats.RerollCubes + diffReroll end
                     
                     saveSessionStats()
                     updateStatsUI()
