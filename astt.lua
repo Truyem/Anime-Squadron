@@ -60,8 +60,46 @@ if isLobby then
                 writefile("AnimeSquadron_MapsCache.json", HttpService:JSONEncode(traitMaps))
             end)
         end
+        
+        -- Dynamic Scraper for MATERIAL_DROPS
+        _G.MATERIAL_DROPS = {}
+        for worldId, world in pairs(Worlds) do
+            if type(worldId) == "number" and world.name and world.Rewards then
+                for mode, diffs in pairs(world.Rewards) do
+                    for diff, acts in pairs(diffs) do
+                        if type(acts) == "table" then
+                            for act, items in pairs(acts) do
+                                if type(items) == "table" then
+                                    for itemName, _ in pairs(items) do
+                                        if itemName ~= "Gems" and itemName ~= "XP" and itemName ~= "Gold" and itemName ~= "Trait Shards" and itemName ~= "Senzu" and itemName ~= "Energy" then
+                                            if not _G.MATERIAL_DROPS[itemName] then
+                                                _G.MATERIAL_DROPS[itemName] = { world = world.name, mode = mode, acts = {act} }
+                                            else
+                                                local hasAct = false
+                                                for _, v in ipairs(_G.MATERIAL_DROPS[itemName].acts) do
+                                                    if v == act then hasAct = true break end
+                                                end
+                                                if not hasAct then
+                                                    table.insert(_G.MATERIAL_DROPS[itemName].acts, act)
+                                                end
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+        end
+        if isfile and writefile then
+            pcall(function() writefile("AnimeSquadron_MatCache.json", HttpService:JSONEncode(_G.MATERIAL_DROPS)) end)
+        end
     end
 else
+    if isfile and readfile and isfile("AnimeSquadron_MatCache.json") then
+        pcall(function() _G.MATERIAL_DROPS = HttpService:JSONDecode(readfile("AnimeSquadron_MatCache.json")) end)
+    end
     if isfile and readfile and isfile("AnimeSquadron_MapsCache.json") then
         local succ, data = pcall(function() return HttpService:JSONDecode(readfile("AnimeSquadron_MapsCache.json")) end)
         if succ and type(data) == "table" then
@@ -82,6 +120,9 @@ local Window = Fluent:CreateWindow({
 
 local Tabs = {
     AutoFarm = Window:AddTab({ Title = "Auto Farm", Icon = "play" }),
+    EvoCraft = Window:AddTab({ Title = "Evo & Craft", Icon = "hammer" }),
+    ShopUpgrade = Window:AddTab({ Title = "Shop & Upgrades", Icon = "shopping-cart" }),
+    Claims = Window:AddTab({ Title = "Claims & Misc", Icon = "gift" }),
     Sniper = Window:AddTab({ Title = "Challenge Sniper", Icon = "target" }),
     Maps = Window:AddTab({ Title = "Trait Maps", Icon = "map" }),
     Ingame = Window:AddTab({ Title = "Ingame Helper", Icon = "swords" }),
@@ -195,7 +236,218 @@ local DropdownSniperSyncMode = Tabs.Ingame:AddDropdown("SniperSyncMode", {
 })
 
 
+-- === EVO & CRAFT UI ===
+Tabs.EvoCraft:AddParagraph({ Title = "Evo & Craft Priority", Content = "Runs in the Lobby. Lower priority than Auto Quest. Evo and Craft will NOT run simultaneously." })
 
+local DropdownEvoTarget = Tabs.EvoCraft:AddDropdown("EvoTarget", { Title = "Evo Target", Values = {"(Waiting for Inventory...)"}, Multi = false, Default = 1 })
+
+if isLobby then
+    task.spawn(function()
+        local util
+        while task.wait(5) do
+            if not util then pcall(function() util = require(game:GetService("Players").LocalPlayer.PlayerScripts.Client.Utility) end) end
+            if util and util.data and util.data.characters then
+                local ownedEvos = {}
+                local added = {}
+                for id, char in pairs(util.data.characters) do
+                    if char.name and not added[char.name] then
+                        local template = game:GetService("ReplicatedStorage").Characters:FindFirstChild(char.name)
+                        if template and template:FindFirstChild("data") then
+                            local data = require(template.data)
+                            if data.evolution or data.awakening or data.evolve or data.evo then
+                                table.insert(ownedEvos, char.name)
+                                added[char.name] = true
+                            end
+                        end
+                    end
+                end
+                if #ownedEvos == 0 then table.insert(ownedEvos, "(No Evo Units Owned)") end
+                DropdownEvoTarget:SetValues(ownedEvos)
+            end
+        end
+    end)
+end
+local InputEvoQty = Tabs.EvoCraft:AddInput("EvoQty", { Title = "Quantity to Evo", Default = "1", Numeric = true, Finished = false })
+local ToggleAutoEvo = Tabs.EvoCraft:AddToggle("AutoEvo", { Title = "ENABLE Auto Evo", Default = false })
+
+Tabs.EvoCraft:AddParagraph({ Title = "---", Content = "" })
+
+local DropdownCraftTarget = Tabs.EvoCraft:AddDropdown("CraftTarget", { Title = "Craft Target", Values = {"(Loading Craftables...)"}, Multi = false, Default = 1 })
+
+task.spawn(function()
+    local craftTargets = {}
+    local get = game:GetService("ReplicatedStorage").Remotes.Crafting:WaitForChild("get", 5)
+    if get then
+        local succ, recipes = pcall(function() return get:InvokeServer() end)
+        if succ and type(recipes) == "table" then
+            for name, _ in pairs(recipes) do
+                table.insert(craftTargets, name)
+            end
+        end
+    end
+    table.sort(craftTargets)
+    if #craftTargets == 0 then table.insert(craftTargets, "(None)") end
+    DropdownCraftTarget:SetValues(craftTargets)
+end)
+local InputCraftQty = Tabs.EvoCraft:AddInput("CraftQty", { Title = "Quantity to Craft", Default = "1", Numeric = true, Finished = false })
+local ToggleAutoCraft = Tabs.EvoCraft:AddToggle("AutoCraft", { Title = "ENABLE Auto Craft", Default = false })
+
+-- === SHOPS & UPGRADES UI ===
+Tabs.ShopUpgrade:AddParagraph({ Title = "Dynamic Shops", Content = "Merchant lists all possible items. Raid/Event refresh automatically." })
+
+local DropdownMerchantItem = Tabs.ShopUpgrade:AddDropdown("MerchantItem", { Title = "[Merchant] Target Item", Values = {"(Loading Items...)"}, Multi = true, Default = {} })
+
+task.spawn(function()
+    local allMerchantItems = {}
+    pcall(function()
+        local rep = game:GetService("ReplicatedStorage")
+        local get = rep.Remotes.Shops:WaitForChild("get", 5)
+        
+        local blacklist = {}
+        if get then
+            local succ1, raid = pcall(function() return get:InvokeServer("gt_city_raid") end)
+            if succ1 and type(raid) == "table" then for k,_ in pairs(raid) do blacklist[k] = true end end
+            
+            local succ2, event = pcall(function() return get:InvokeServer("baras_event") end)
+            if succ2 and type(event) == "table" then for k,_ in pairs(event) do blacklist[k] = true end end
+        end
+        
+        local whitelist = {
+            ["Gold"] = true, ["Gems"] = true, ["Trait Shards"] = true, ["Reroll Cubes"] = true, ["Perfect Cubes"] = true
+        }
+        
+        for _, folderName in ipairs({"Items", "Materials"}) do
+            local folder = rep:FindFirstChild(folderName)
+            if folder then
+                for _, v in ipairs(folder:GetChildren()) do
+                    local name = v.Name
+                    if whitelist[name] then
+                        if not table.find(allMerchantItems, name) then table.insert(allMerchantItems, name) end
+                    else
+                        if not blacklist[name] and not string.find(name, "XP") and not string.find(name, "Coin") then
+                            if not table.find(allMerchantItems, name) then table.insert(allMerchantItems, name) end
+                        end
+                    end
+                end
+            end
+        end
+        table.sort(allMerchantItems)
+    end)
+    if #allMerchantItems == 0 then table.insert(allMerchantItems, "(Empty)") end
+    DropdownMerchantItem:SetValues(allMerchantItems)
+end)
+local ToggleAutoBuyMerchant = Tabs.ShopUpgrade:AddToggle("AutoBuyMerchant", { Title = "ENABLE Auto Buy [Merchant]", Default = false })
+
+local DropdownRaidShopItem = Tabs.ShopUpgrade:AddDropdown("RaidShopItem", { Title = "[Raid] Target Item", Values = {"(Waiting...)"}, Multi = false, Default = 1 })
+local ToggleAutoBuyRaid = Tabs.ShopUpgrade:AddToggle("AutoBuyRaid", { Title = "ENABLE Auto Buy [Raid Shop]", Default = false })
+
+local DropdownEventShopItem = Tabs.ShopUpgrade:AddDropdown("EventShopItem", { Title = "[Event] Target Item", Values = {"(Waiting...)"}, Multi = false, Default = 1 })
+local ToggleAutoBuyEvent = Tabs.ShopUpgrade:AddToggle("AutoBuyEvent", { Title = "ENABLE Auto Buy [Event Shop]", Default = false })
+
+if isLobby then
+    task.spawn(function()
+        local get = game:GetService("ReplicatedStorage").Remotes.Shops:WaitForChild("get", 5)
+        if not get then return end
+        
+        while task.wait(10) do
+            local function updateShop(shopId, dropdown)
+                local succ, data = pcall(function() return get:InvokeServer(shopId) end)
+                if succ and type(data) == "table" then
+                    local items = {}
+                    for k,v in pairs(data) do
+                        table.insert(items, tostring(k))
+                    end
+                    if #items == 0 then table.insert(items, "(Empty)") end
+                    dropdown:SetValues(items)
+                end
+            end
+            
+            updateShop("gt_city_raid", DropdownRaidShopItem)
+            updateShop("baras_event", DropdownEventShopItem)
+        end
+    end)
+end
+
+Tabs.ShopUpgrade:AddParagraph({ Title = "Perks Upgrades", Content = "Auto upgrade your base stats." })
+local DropdownPerkTarget = Tabs.ShopUpgrade:AddDropdown("PerkTarget", { Title = "Perk Target", Values = {"health", "yen_generation", "yen_max"}, Multi = false, Default = 1 })
+local ToggleAutoPerk = Tabs.ShopUpgrade:AddToggle("AutoPerk", { Title = "ENABLE Auto Perk Upgrade", Default = false })
+
+-- === CLAIMS & MISC UI ===
+Tabs.Claims:AddParagraph({ Title = "Auto Claims", Content = "Automatically claims passive rewards." })
+local ToggleAutoPass = Tabs.Claims:AddToggle("AutoPass", { Title = "ENABLE Auto Battlepass", Default = false })
+local ToggleAutoMilestones = Tabs.Claims:AddToggle("AutoMilestones", { Title = "ENABLE Auto Level Milestones", Default = false })
+local ToggleAutoDiscovery = Tabs.Claims:AddToggle("AutoDiscovery", { Title = "ENABLE Auto Discovery Index", Default = false })
+
+Tabs.Claims:AddParagraph({ Title = "Code Redeemer", Content = "Auto redeem predefined codes and dynamically scan Update Log." })
+Tabs.Claims:AddButton({
+    Title = "Redeem All Codes",
+    Description = "Sends all known codes to the server.",
+    Callback = function()
+        Window:Dialog({
+            Title = "Redeeming Codes",
+            Content = "Sending codes to server. Check game UI for rewards!",
+            Buttons = { { Title = "OK", Callback = function() end } }
+        })
+        task.spawn(function()
+            local codes = {
+                "UPD0.75!", "TheHeroHunter!", "SryForLongMaintenance!!", "StrongestChallenger!", "EventChanges"
+            }
+            
+            pcall(function()
+                local el = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("UpdateLog", true)
+                if el then
+                    for _, lbl in ipairs(el:GetDescendants()) do
+                        if lbl:IsA("TextLabel") then
+                            local txt = lbl.Text
+                            if string.sub(txt, 1, 2) == "- " then
+                                local possibleCode = string.sub(txt, 3)
+                                if not string.find(possibleCode, " ") then
+                                    local alreadyHas = false
+                                    for _, c in ipairs(codes) do if c == possibleCode then alreadyHas = true break end end
+                                    if not alreadyHas then table.insert(codes, possibleCode) end
+                                end
+                            end
+                        end
+                    end
+                end
+            end)
+            
+            local use = game:GetService("ReplicatedStorage").Remotes.Codes:WaitForChild("use", 5)
+            if use then
+                for _, code in ipairs(codes) do
+                    pcall(function() use:InvokeServer(code) end)
+                    task.wait(1.5)
+                end
+            end
+        end)
+    end
+})
+
+Tabs.Webhook:AddParagraph({ Title = "Discord Webhook", Content = "Receive notifications when an Auto process completes or fails." })
+local InputWebhookURL = Tabs.Webhook:AddInput("WebhookURL", { Title = "Discord Webhook URL", Default = "", Numeric = false, Finished = false })
+local ToggleEnableWebhook = Tabs.Webhook:AddToggle("EnableWebhook", { Title = "ENABLE Webhook Notifications", Default = false })
+
+local function sendWebhook(title, description, color)
+    local url = Options.WebhookURL and Options.WebhookURL.Value
+    if not url or url == "" then return end
+    local req = request or http_request or (syn and syn.request)
+    if not req then return end
+    pcall(function()
+        req({
+            Url = url,
+            Method = "POST",
+            Headers = { ["Content-Type"] = "application/json" },
+            Body = game:GetService("HttpService"):JSONEncode({
+                username = "Anime Squadron Universal",
+                embeds = {{
+                    title = title,
+                    description = description,
+                    color = color
+                }}
+            })
+        })
+    end)
+end
 local StatusParagraph
 if isLobby then
     StatusParagraph = Tabs.AutoFarm:AddParagraph({ Title = "Status: LOBBY", Content = "Master Auto Farm system is ready." })
@@ -429,6 +681,159 @@ if isLobby then
                 end
                 if anyToClaim then
                     pcall(function() game:GetService("ReplicatedStorage").Remotes.Quests.claim_all:InvokeServer() end)
+                end
+            end
+            
+            -- Claims & Misc
+            if Options.AutoPass and Options.AutoPass.Value then
+                pcall(function() game:GetService("ReplicatedStorage").Remotes.Battlepass.claim_all:InvokeServer() end)
+            end
+            if Options.AutoMilestones and Options.AutoMilestones.Value then
+                pcall(function() game:GetService("ReplicatedStorage").Remotes.Level_Milestones.claim:InvokeServer() end)
+            end
+            if Options.AutoDiscovery and Options.AutoDiscovery.Value then
+                pcall(function() game:GetService("ReplicatedStorage").Remotes.Characters.claim_all_index:InvokeServer() end)
+            end
+            
+            -- Perks
+            if Options.AutoPerk and Options.AutoPerk.Value then
+                pcall(function() game:GetService("ReplicatedStorage").Remotes.Perks.upgrade:InvokeServer(Options.PerkTarget.Value) end)
+            end
+            
+            -- Shops
+            local function tryBuyShop(toggleOpt, itemOpt, shopId)
+                if toggleOpt and toggleOpt.Value then
+                    local items = itemOpt and itemOpt.Value
+                    if type(items) == "table" then
+                        for itemName, isSelected in pairs(items) do
+                            if isSelected and not string.find(itemName, "Waiting") and not string.find(itemName, "Empty") then
+                                pcall(function() game:GetService("ReplicatedStorage").Remotes.Shops.buy:InvokeServer(itemName, shopId, 1) end)
+                            end
+                        end
+                    elseif type(items) == "string" then
+                        if not string.find(items, "Waiting") and not string.find(items, "Empty") then
+                            pcall(function() game:GetService("ReplicatedStorage").Remotes.Shops.buy:InvokeServer(items, shopId, 1) end)
+                        end
+                    end
+                end
+            end
+            
+            tryBuyShop(Options.AutoBuyMerchant, Options.MerchantItem, "merchant")
+            tryBuyShop(Options.AutoBuyRaid, Options.RaidShopItem, "gt_city_raid")
+            tryBuyShop(Options.AutoBuyEvent, Options.EventShopItem, "baras_event")
+            
+            -- Evo & Crafting (Priority below Auto Quest)
+            if not activeQuestMap then
+                local doingEvo = Options.AutoEvo and Options.AutoEvo.Value
+                local doingCraft = Options.AutoCraft and Options.AutoCraft.Value
+                
+                if doingEvo then
+                    local targetName = Options.EvoTarget.Value
+                    local targetQty = tonumber(Options.EvoQty.Value) or 1
+                    
+                    local template = game:GetService("ReplicatedStorage").Characters:FindFirstChild(targetName)
+                    if template and template:FindFirstChild("data") then
+                        local data = require(template.data)
+                        local evoData = data.evolution or data.awakening or data.evolve or data.evo
+                        if evoData and evoData.cost then
+                            local missingMats = {}
+                            local totalMissingCount = 0
+                            
+                            local isMissingGold = false
+                            for matName, requiredPerEvo in pairs(evoData.cost) do
+                                local totalRequired = requiredPerEvo * targetQty
+                                local have = (util.data.items and util.data.items[matName] or 0) + (util.data.stats and util.data.stats[matName] or 0)
+                                if have < totalRequired then
+                                    totalMissingCount = totalMissingCount + 1
+                                    table.insert(missingMats, { name = matName, short = totalRequired - have })
+                                    if string.lower(matName) == "gold" then isMissingGold = true end
+                                end
+                            end
+                            
+                            if isMissingGold then
+                                ToggleAutoEvo:SetValue(false)
+                                if Options.EnableWebhook and Options.EnableWebhook.Value then
+                                    task.spawn(sendWebhook, "❌ Auto Evo Failed", "Not enough Gold to evolve **" .. targetName .. "**! Auto Evo disabled.", 0xFF0000)
+                                end
+                            elseif totalMissingCount > 0 then
+                                local mat = missingMats[1]
+                                table.insert(activeQuestTexts, string.format("Evo Farming: %s (Need %d %s)", targetName, mat.short, mat.name))
+                                if _G.MATERIAL_DROPS and _G.MATERIAL_DROPS[mat.name] then
+                                    local dropInfo = _G.MATERIAL_DROPS[mat.name]
+                                    activeQuestMap = { mode = dropInfo.mode, world = dropInfo.world, act = dropInfo.acts[#dropInfo.acts], diff = "Hard" }
+                                end
+                            else
+                                table.insert(activeQuestTexts, string.format("Evo Ready: %s x%d", targetName, targetQty))
+                                local evolvedCount = 0
+                                if util.data.characters then
+                                    for id, charData in pairs(util.data.characters) do
+                                        if charData.name == targetName then
+                                            local succ, res = pcall(function() return game:GetService("ReplicatedStorage").Remotes.Awakening.awaken:InvokeServer(id) end)
+                                            if succ and res then
+                                                evolvedCount = evolvedCount + 1
+                                                if Options.EnableWebhook and Options.EnableWebhook.Value then
+                                                    task.spawn(sendWebhook, "🎉 Auto Evo Completed!", "Successfully evolved **" .. targetName .. "**!", 0x00FF00)
+                                                end
+                                                if evolvedCount >= targetQty then
+                                                    ToggleAutoEvo:SetValue(false)
+                                                    break
+                                                end
+                                                task.wait(1)
+                                            end
+                                        end
+                                    end
+                                end
+                            end
+                        end
+                    end
+                elseif doingCraft then
+                    local targetName = Options.CraftTarget.Value
+                    local targetQty = tonumber(Options.CraftQty.Value) or 1
+                    
+                    local get = game:GetService("ReplicatedStorage").Remotes.Crafting:WaitForChild("get", 5)
+                    if get then
+                        local succ, recipes = pcall(function() return get:InvokeServer() end)
+                        if succ and type(recipes) == "table" and recipes[targetName] then
+                            local recipe = recipes[targetName]
+                            local missingMats = {}
+                            local totalMissingCount = 0
+                            
+                            local isMissingGold = false
+                            for matName, requiredPerCraftStr in pairs(recipe) do
+                                local requiredPerCraft = tonumber(requiredPerCraftStr) or 0
+                                local totalRequired = requiredPerCraft * targetQty
+                                local have = (util.data.items and util.data.items[matName] or 0) + (util.data.stats and util.data.stats[matName] or 0)
+                                if have < totalRequired then
+                                    totalMissingCount = totalMissingCount + 1
+                                    table.insert(missingMats, { name = matName, short = totalRequired - have })
+                                    if string.lower(matName) == "gold" then isMissingGold = true end
+                                end
+                            end
+                            
+                            if isMissingGold then
+                                ToggleAutoCraft:SetValue(false)
+                                if Options.EnableWebhook and Options.EnableWebhook.Value then
+                                    task.spawn(sendWebhook, "❌ Auto Craft Failed", "Not enough Gold to craft **" .. targetName .. "**! Auto Craft disabled.", 0xFF0000)
+                                end
+                            elseif totalMissingCount > 0 then
+                                local mat = missingMats[1]
+                                table.insert(activeQuestTexts, string.format("Craft Farming: %s (Need %d %s)", targetName, mat.short, mat.name))
+                                if _G.MATERIAL_DROPS and _G.MATERIAL_DROPS[mat.name] then
+                                    local dropInfo = _G.MATERIAL_DROPS[mat.name]
+                                    activeQuestMap = { mode = dropInfo.mode, world = dropInfo.world, act = dropInfo.acts[#dropInfo.acts], diff = "Hard" }
+                                end
+                            else
+                                table.insert(activeQuestTexts, string.format("Craft Ready: %s x%d", targetName, targetQty))
+                                local succ, res = pcall(function() return game:GetService("ReplicatedStorage").Remotes.Crafting.craft:InvokeServer(targetName, targetQty) end)
+                                if succ and res then
+                                    if Options.EnableWebhook and Options.EnableWebhook.Value then
+                                        task.spawn(sendWebhook, "🔨 Auto Craft Completed!", "Successfully crafted **" .. targetQty .. "x " .. targetName .. "**!", 0x00AFFF)
+                                    end
+                                    ToggleAutoCraft:SetValue(false)
+                                end
+                            end
+                        end
+                    end
                 end
             end
             
