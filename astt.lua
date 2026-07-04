@@ -180,8 +180,10 @@ end
 
 Tabs.Ingame:AddParagraph({ Title = "Ingame Utilities", Content = "Only active during a match." })
 local ToggleLeave = Tabs.Ingame:AddToggle("AutoLeaveToggle", { Title = "ENABLE Auto Leave (On Max Limit/Cant Replay)", Default = false })
+local ToggleLeaveBase = Tabs.Ingame:AddToggle("AutoLeaveBaseFailsafe", { Title = "ENABLE Auto Leave (Base 0 HP Failsafe)", Default = false })
 local ToggleReplay = Tabs.Ingame:AddToggle("AutoReplayToggle", { Title = "ENABLE Auto Replay", Default = false })
 local ToggleSpeed = Tabs.Ingame:AddToggle("AutoSpeedToggle", { Title = "ENABLE Auto Speed (Max 2x/3x)", Default = false })
+local ToggleUltimate = Tabs.Ingame:AddToggle("AutoUltimateToggle", { Title = "ENABLE Auto Ultimate (Only when Enemies present)", Default = false })
 
 Tabs.Ingame:AddParagraph({ Title = "Challenge Sniper Sync", Content = "Automatically return to lobby around XX:00 and XX:30 to check new challenges." })
 local ToggleSniperSync = Tabs.Ingame:AddToggle("AutoSniperSync", { Title = "ENABLE Sniper Sync", Default = false })
@@ -591,6 +593,8 @@ else
         end)
     end
     
+    local baseZeroTime = nil
+    
     task.spawn(function()
         while true do
             task.wait(2)
@@ -625,6 +629,62 @@ else
                         Event:InvokeServer(2)
                     end
                 end)
+            end
+            
+            if Options.AutoUltimateToggle and Options.AutoUltimateToggle.Value then
+                local hasEnemy = false
+                if workspace:FindFirstChild("Enemies") and #workspace.Enemies:GetChildren() > 0 then
+                    hasEnemy = true
+                end
+                
+                if hasEnemy then
+                    local hotbar = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("Hotbar")
+                    if hotbar and hotbar:FindFirstChild("BottomUI") and hotbar.BottomUI:FindFirstChild("Towers") then
+                        for _, towerUi in pairs(hotbar.BottomUI.Towers:GetChildren()) do
+                            local btn = towerUi:FindFirstChild("Button")
+                            if btn and btn:GetAttribute("ult") == true then
+                                local startEvent = game:GetService("ReplicatedStorage").Remotes.Ultimates:FindFirstChild("start")
+                                if startEvent then
+                                    pcall(function() startEvent:InvokeServer(towerUi.Name) end)
+                                    task.wait(0.2)
+                                end
+                            end
+                        end
+                    end
+                end
+            end
+            
+            if not isTeleporting and Options.AutoLeaveBaseFailsafe and Options.AutoLeaveBaseFailsafe.Value then
+                local baseDead = false
+                for _, v in pairs(workspace:GetDescendants()) do
+                    if v.Name == "Base" or v.Name == "EnemyBase" or v.Name == "base" then
+                        local hp = v:FindFirstChild("Health") or v:FindFirstChild("health") or v:FindFirstChild("HP")
+                        if hp and (type(hp.Value) == "number") and hp.Value <= 0 then
+                            baseDead = true
+                            break
+                        end
+                        local hum = v:FindFirstChildOfClass("Humanoid")
+                        if hum and hum.Health <= 0 then
+                            baseDead = true
+                            break
+                        end
+                    end
+                end
+                
+                local menus = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("Menus")
+                local endScreen = menus and menus:FindFirstChild("EndScreen")
+                local hasEndScreen = endScreen and endScreen.Visible
+                
+                if baseDead and not hasEndScreen then
+                    if not baseZeroTime then
+                        baseZeroTime = os.time()
+                    elseif os.time() - baseZeroTime >= 10 then
+                        forceTeleportToLobby("Failsafe Abort", "Base reached 0 HP (waited 10s, no EndScreen)! Teleporting to Lobby...")
+                        baseZeroTime = nil
+                    end
+                else
+                    baseZeroTime = nil
+                end
             end
             for i, cfg in ipairs(mapConfigs) do
                 local currentCap = util and util.data and util.data.caps and util.data.caps[cfg.capStr] or 0
