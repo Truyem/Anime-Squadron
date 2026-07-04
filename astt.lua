@@ -181,6 +181,7 @@ end
 Tabs.Ingame:AddParagraph({ Title = "Ingame Utilities", Content = "Only active during a match." })
 local ToggleLeave = Tabs.Ingame:AddToggle("AutoLeaveToggle", { Title = "ENABLE Auto Leave (On Max Limit/Cant Replay)", Default = false })
 local ToggleReplay = Tabs.Ingame:AddToggle("AutoReplayToggle", { Title = "ENABLE Auto Replay", Default = false })
+local ToggleSpeed = Tabs.Ingame:AddToggle("AutoSpeedToggle", { Title = "ENABLE Auto Speed (Max 2x/3x)", Default = false })
 
 Tabs.Ingame:AddParagraph({ Title = "Challenge Sniper Sync", Content = "Automatically return to lobby around XX:00 and XX:30 to check new challenges." })
 local ToggleSniperSync = Tabs.Ingame:AddToggle("AutoSniperSync", { Title = "ENABLE Sniper Sync", Default = false })
@@ -193,10 +194,11 @@ local DropdownSniperSyncMode = Tabs.Ingame:AddDropdown("SniperSyncMode", {
 
 
 
+local StatusParagraph
 if isLobby then
-    Tabs.AutoFarm:AddParagraph({ Title = "Status: LOBBY", Content = "Master Auto Farm system is ready." })
+    StatusParagraph = Tabs.AutoFarm:AddParagraph({ Title = "Status: LOBBY", Content = "Master Auto Farm system is ready." })
 else
-    Tabs.AutoFarm:AddParagraph({ Title = "Status: INGAME", Content = "NOTE: Auto Farm functions will NOT operate while in-game. It will resume automatically in the Lobby." })
+    StatusParagraph = Tabs.AutoFarm:AddParagraph({ Title = "Status: INGAME", Content = "NOTE: Auto Farm functions will NOT operate while in-game. It will resume automatically in the Lobby." })
 end
 
 local SessionStats = {
@@ -262,6 +264,7 @@ loadSessionStats()
 local friendToggle = Tabs.AutoFarm:AddToggle("FriendsOnly", { Title = "Friends Only", Default = true })
 local AutoClaimDaily = Tabs.AutoFarm:AddToggle("AutoClaimDaily", { Title = "Auto Claim Daily Rewards", Default = false })
 local AutoClaimBundle = Tabs.AutoFarm:AddToggle("AutoClaimBundle", { Title = "Auto Claim Free Bundle", Default = false })
+local AutoQuest = Tabs.AutoFarm:AddToggle("AutoQuest", { Title = "Auto Quest (Highest Priority)", Default = false })
 local AutoToggle = Tabs.AutoFarm:AddToggle("MasterAutoRun", { Title = "ENABLE MASTER AUTO FARM", Default = false })
 
 Tabs.Webhook:AddParagraph({ Title = "Discord Webhook", Content = "Automatic status reporter" })
@@ -373,8 +376,11 @@ if isLobby then
                 lastClaimTime = os.time()
                 if Options.AutoClaimDaily and Options.AutoClaimDaily.Value then
                     pcall(function()
-                        local r = ReplicatedStorage.Remotes.Daily_Rewards.claim
-                        if r:IsA("RemoteFunction") then r:InvokeServer() else r:FireServer() end
+                        if util and util.data and util.data.daily_rewards and not util.data.daily_rewards.claimed then
+                            local r = ReplicatedStorage.Remotes.Daily_Rewards.claim
+                            local day = util.data.daily_rewards.day
+                            if r:IsA("RemoteFunction") then r:InvokeServer(day) else r:FireServer(day) end
+                        end
                     end)
                 end
                 if Options.AutoClaimBundle and Options.AutoClaimBundle.Value then
@@ -382,6 +388,53 @@ if isLobby then
                         local r = ReplicatedStorage.Remotes.Monetization.free_bundle
                         if r:IsA("RemoteFunction") then r:InvokeServer() else r:FireServer() end
                     end)
+                end
+            end
+            
+            local activeQuestMap = nil
+            local activeQuestTexts = {}
+            if Options.AutoQuest and Options.AutoQuest.Value and util and util.data and util.data.quests then
+                local anyToClaim = false
+                for k, v in pairs(util.data.quests) do
+                    if v.name ~= "Complete All" and v.name ~= "Weekly Complete All" then
+                        if v.progress >= v.required then
+                            anyToClaim = true
+                        else
+                            local lowerName = string.lower(v.name)
+                            if string.find(lowerName, "summon") then
+                                local diff = v.required - v.progress
+                                if diff > 0 then
+                                    table.insert(activeQuestTexts, string.format("Quest: %s [%d/%d]", v.name, v.progress, v.required))
+                                    local currentGems = util.data.stats["Gems"] or 0
+                                    local requiredGems = diff * 50
+                                    if requiredGems < 500 then requiredGems = 500 end
+                                    
+                                    if currentGems >= requiredGems then
+                                        pcall(function() game:GetService("ReplicatedStorage").Remotes.Summon.start:InvokeServer("Basic Banner", 10) end)
+                                        task.wait(1)
+                                    else
+                                        -- Not enough Gems, skipping this summon quest...
+                                    end
+                                end
+                            elseif string.find(lowerName, "boss") or string.find(lowerName, "kill") or string.find(lowerName, "story") or string.find(lowerName, "any") or string.find(lowerName, "clear") then
+                                if not activeQuestMap then
+                                    activeQuestMap = { act = 1, diff = "Normal", mode = "Story", world = "Ninja Village" }
+                                end
+                                table.insert(activeQuestTexts, string.format("Quest: %s [%d/%d]", v.name, v.progress, v.required))
+                            end
+                        end
+                    end
+                end
+                if anyToClaim then
+                    pcall(function() game:GetService("ReplicatedStorage").Remotes.Quests.claim_all:InvokeServer() end)
+                end
+            end
+            
+            if StatusParagraph then
+                if #activeQuestTexts > 0 then
+                    StatusParagraph:SetDesc("Master Auto Farm system is ready.\n" .. table.concat(activeQuestTexts, "\n"))
+                else
+                    StatusParagraph:SetDesc("Master Auto Farm system is ready.")
                 end
             end
             
@@ -400,7 +453,15 @@ if isLobby then
                 local succ, challengeData = pcall(function() return get_challenges:InvokeServer() end)
                 local joinedSomething = false
                 
-                if succ and type(challengeData) == "table" then
+                if activeQuestMap then
+                    if activeQuestMap.mode == "Story" then
+                        Fluent:Notify({ Title = "Auto Quest", Content = "Joining Ninja Village Act 1 for Quest!", Duration = 3 })
+                        local s = joinRoom(activeQuestMap.act, activeQuestMap.diff, activeQuestMap.mode, activeQuestMap.world, nil, nil, nil)
+                        if s then joinedSomething = true end
+                    end
+                end
+                
+                if not joinedSomething and succ and type(challengeData) == "table" then
                     if isfile and writefile then
                         pcall(function() writefile("AnimeSquadron_LastSnipeCheck.txt", tostring(math.floor(os.time() / 1800))) end)
                     end
@@ -534,7 +595,37 @@ else
         while true do
             task.wait(2)
             
+            if Options.AutoQuest and Options.AutoQuest.Value and util and util.data and util.data.quests then
+                local activeQuestTexts = {}
+                for k, v in pairs(util.data.quests) do
+                    if v.name ~= "Complete All" and v.name ~= "Weekly Complete All" then
+                        if v.progress < v.required then
+                            local lowerName = string.lower(v.name)
+                            if string.find(lowerName, "boss") or string.find(lowerName, "kill") or string.find(lowerName, "story") or string.find(lowerName, "any") or string.find(lowerName, "clear") or string.find(lowerName, "summon") then
+                                table.insert(activeQuestTexts, string.format("Quest: %s [%d/%d]", v.name, v.progress, v.required))
+                            end
+                        end
+                    end
+                end
+                
+                if StatusParagraph then
+                    if #activeQuestTexts > 0 then
+                        StatusParagraph:SetDesc("NOTE: Auto Farm functions will NOT operate while in-game. It will resume automatically in the Lobby.\n" .. table.concat(activeQuestTexts, "\n"))
+                    else
+                        StatusParagraph:SetDesc("NOTE: Auto Farm functions will NOT operate while in-game. It will resume automatically in the Lobby.")
+                    end
+                end
+            end
             
+            if Options.AutoSpeedToggle and Options.AutoSpeedToggle.Value then
+                pcall(function()
+                    local Event = game:GetService("ReplicatedStorage").Remotes.Game.change_speed
+                    local res, msg = Event:InvokeServer(3)
+                    if res == false and type(msg) == "string" and string.find(string.lower(msg), "pass") then
+                        Event:InvokeServer(2)
+                    end
+                end)
+            end
             for i, cfg in ipairs(mapConfigs) do
                 local currentCap = util and util.data and util.data.caps and util.data.caps[cfg.capStr] or 0
                 local isFull = (currentCap >= cfg.mapData.cap)
