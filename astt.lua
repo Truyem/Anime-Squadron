@@ -109,7 +109,7 @@ else
 end
 
 local Window = Fluent:CreateWindow({
-    Title = "Universal Auto Farm",
+    Title = "Free HUB",
     SubTitle = "Anime Squadron",
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 520),
@@ -423,31 +423,7 @@ Tabs.Claims:AddButton({
     end
 })
 
-Tabs.Webhook:AddParagraph({ Title = "Discord Webhook", Content = "Receive notifications when an Auto process completes or fails." })
-local InputWebhookURL = Tabs.Webhook:AddInput("WebhookURL", { Title = "Discord Webhook URL", Default = "", Numeric = false, Finished = false })
-local ToggleEnableWebhook = Tabs.Webhook:AddToggle("EnableWebhook", { Title = "ENABLE Webhook Notifications", Default = false })
-
-local function sendWebhook(title, description, color)
-    local url = Options.WebhookURL and Options.WebhookURL.Value
-    if not url or url == "" then return end
-    local req = request or http_request or (syn and syn.request)
-    if not req then return end
-    pcall(function()
-        req({
-            Url = url,
-            Method = "POST",
-            Headers = { ["Content-Type"] = "application/json" },
-            Body = game:GetService("HttpService"):JSONEncode({
-                username = "Anime Squadron Universal",
-                embeds = {{
-                    title = title,
-                    description = description,
-                    color = color
-                }}
-            })
-        })
-    end)
-end
+local sendWebhookData
 local StatusParagraph
 if isLobby then
     StatusParagraph = Tabs.AutoFarm:AddParagraph({ Title = "Status: LOBBY", Content = "Master Auto Farm system is ready." })
@@ -526,6 +502,7 @@ local WebhookURL = Tabs.Webhook:AddInput("WebhookURL", { Title = "Webhook URL", 
 local WebhookOnDrop = Tabs.Webhook:AddToggle("WebhookOnDrop", { Title = "Send on Item Drop (Traits/Cubes)", Default = false })
 local WebhookOnMatchEnd = Tabs.Webhook:AddToggle("WebhookOnMatchEnd", { Title = "Send on Match End (Win/Loss)", Default = false })
 local WebhookOnInterval = Tabs.Webhook:AddToggle("WebhookOnInterval", { Title = "Send on Interval", Default = false })
+local WebhookOnEvoCraft = Tabs.Webhook:AddToggle("WebhookOnEvoCraft", { Title = "Send on Evo/Craft (Success/Fail)", Default = false })
 local WebhookInterval = Tabs.Webhook:AddSlider("WebhookInterval", { Title = "Interval (Minutes)", Description = "How often to send", Default = 10, Min = 1, Max = 60, Rounding = 0 })
 
 SaveManager:SetLibrary(Fluent)
@@ -650,32 +627,30 @@ if isLobby then
             if Options.AutoQuest and Options.AutoQuest.Value and util and util.data and util.data.quests then
                 local anyToClaim = false
                 for k, v in pairs(util.data.quests) do
-                    if v.name ~= "Complete All" and v.name ~= "Weekly Complete All" then
-                        if v.progress >= v.required then
-                            anyToClaim = true
-                        else
-                            local lowerName = string.lower(v.name)
-                            if string.find(lowerName, "summon") then
-                                local diff = v.required - v.progress
-                                if diff > 0 then
-                                    table.insert(activeQuestTexts, string.format("Quest: %s [%d/%d]", v.name, v.progress, v.required))
-                                    local currentGems = util.data.stats["Gems"] or 0
-                                    local requiredGems = diff * 50
-                                    if requiredGems < 500 then requiredGems = 500 end
-                                    
-                                    if currentGems >= requiredGems then
-                                        pcall(function() game:GetService("ReplicatedStorage").Remotes.Summon.start:InvokeServer("Basic Banner", 10) end)
-                                        task.wait(1)
-                                    else
-                                        -- Not enough Gems, skipping this summon quest...
-                                    end
-                                end
-                            elseif string.find(lowerName, "boss") or string.find(lowerName, "kill") or string.find(lowerName, "story") or string.find(lowerName, "any") or string.find(lowerName, "clear") then
-                                if not activeQuestMap then
-                                    activeQuestMap = { act = 1, diff = "Normal", mode = "Story", world = "Ninja Village" }
-                                end
+                    if v.progress >= v.required then
+                        anyToClaim = true
+                    else
+                        local lowerName = string.lower(v.name)
+                        if string.find(lowerName, "summon") then
+                            local diff = v.required - v.progress
+                            if diff > 0 then
                                 table.insert(activeQuestTexts, string.format("Quest: %s [%d/%d]", v.name, v.progress, v.required))
+                                local currentGems = util.data.stats["Gems"] or 0
+                                local requiredGems = diff * 50
+                                if requiredGems < 500 then requiredGems = 500 end
+                                
+                                if currentGems >= requiredGems then
+                                    pcall(function() game:GetService("ReplicatedStorage").Remotes.Summon.start:InvokeServer("Basic Banner", 10) end)
+                                    task.wait(1)
+                                else
+                                    -- Not enough Gems, skipping this summon quest...
+                                end
                             end
+                        elseif string.find(lowerName, "boss") or string.find(lowerName, "kill") or string.find(lowerName, "story") or string.find(lowerName, "any") or string.find(lowerName, "clear") then
+                            if not activeQuestMap then
+                                activeQuestMap = { act = 1, diff = "Normal", mode = "Story", world = "Ninja Village" }
+                            end
+                            table.insert(activeQuestTexts, string.format("Quest: %s [%d/%d]", v.name, v.progress, v.required))
                         end
                     end
                 end
@@ -752,8 +727,8 @@ if isLobby then
                             
                             if isMissingGold then
                                 ToggleAutoEvo:SetValue(false)
-                                if Options.EnableWebhook and Options.EnableWebhook.Value then
-                                    task.spawn(sendWebhook, "❌ Auto Evo Failed", "Not enough Gold to evolve **" .. targetName .. "**! Auto Evo disabled.", 0xFF0000)
+                                if Options.WebhookOnEvoCraft and Options.WebhookOnEvoCraft.Value then
+                                    if sendWebhookData then task.spawn(sendWebhookData, "EVO_FAIL", { name = targetName }) end
                                 end
                             elseif totalMissingCount > 0 then
                                 local mat = missingMats[1]
@@ -771,8 +746,8 @@ if isLobby then
                                             local succ, res = pcall(function() return game:GetService("ReplicatedStorage").Remotes.Awakening.awaken:InvokeServer(id) end)
                                             if succ and res then
                                                 evolvedCount = evolvedCount + 1
-                                                if Options.EnableWebhook and Options.EnableWebhook.Value then
-                                                    task.spawn(sendWebhook, "🎉 Auto Evo Completed!", "Successfully evolved **" .. targetName .. "**!", 0x00FF00)
+                                                if Options.WebhookOnEvoCraft and Options.WebhookOnEvoCraft.Value then
+                                                    if sendWebhookData then task.spawn(sendWebhookData, "EVO_SUCCESS", { name = targetName, qty = targetQty }) end
                                                 end
                                                 if evolvedCount >= targetQty then
                                                     ToggleAutoEvo:SetValue(false)
@@ -812,8 +787,8 @@ if isLobby then
                             
                             if isMissingGold then
                                 ToggleAutoCraft:SetValue(false)
-                                if Options.EnableWebhook and Options.EnableWebhook.Value then
-                                    task.spawn(sendWebhook, "❌ Auto Craft Failed", "Not enough Gold to craft **" .. targetName .. "**! Auto Craft disabled.", 0xFF0000)
+                                if Options.WebhookOnEvoCraft and Options.WebhookOnEvoCraft.Value then
+                                    if sendWebhookData then task.spawn(sendWebhookData, "CRAFT_FAIL", { name = targetName }) end
                                 end
                             elseif totalMissingCount > 0 then
                                 local mat = missingMats[1]
@@ -826,8 +801,8 @@ if isLobby then
                                 table.insert(activeQuestTexts, string.format("Craft Ready: %s x%d", targetName, targetQty))
                                 local succ, res = pcall(function() return game:GetService("ReplicatedStorage").Remotes.Crafting.craft:InvokeServer(targetName, targetQty) end)
                                 if succ and res then
-                                    if Options.EnableWebhook and Options.EnableWebhook.Value then
-                                        task.spawn(sendWebhook, "🔨 Auto Craft Completed!", "Successfully crafted **" .. targetQty .. "x " .. targetName .. "**!", 0x00AFFF)
+                                    if Options.WebhookOnEvoCraft and Options.WebhookOnEvoCraft.Value then
+                                        if sendWebhookData then task.spawn(sendWebhookData, "CRAFT_SUCCESS", { name = targetName, qty = targetQty }) end
                                     end
                                     ToggleAutoCraft:SetValue(false)
                                 end
@@ -1177,7 +1152,7 @@ else
         end
     end)
 end
-local function sendWebhookData(status, diffs)
+    sendWebhookData = function(status, diffs)
     if WebhookURL.Value == "" then return false, "No URL configured" end
     
     local util
@@ -1232,6 +1207,18 @@ local function sendWebhookData(status, diffs)
         if #droppedItems > 0 then
             statusText = "Item Dropped! (" .. table.concat(droppedItems, ", ") .. ")"
         end
+    elseif status == "EVO_SUCCESS" then
+        embedColor = 65280
+        statusText = "Evolved: " .. (diffs.qty or 1) .. "x " .. (diffs.name or "Unit")
+    elseif status == "EVO_FAIL" then
+        embedColor = 16711680
+        statusText = "Evo Failed: " .. (diffs.name or "Unit") .. " (Missing Gold)"
+    elseif status == "CRAFT_SUCCESS" then
+        embedColor = 45055
+        statusText = "Crafted: " .. (diffs.qty or 1) .. "x " .. (diffs.name or "Gear")
+    elseif status == "CRAFT_FAIL" then
+        embedColor = 16711680
+        statusText = "Craft Failed: " .. (diffs.name or "Gear") .. " (Missing Gold)"
     end
     
     local playerName = game.Players.LocalPlayer.Name
@@ -1252,7 +1239,7 @@ local function sendWebhookData(status, diffs)
             { name = "<:RerollCubes:1521405341667954789> Reroll Cubes", value = strReroll, inline = true },
             { name = "📊 Status", value = statusText, inline = true }
         },
-        footer = { text = "Universal Auto Farm • " .. os.date("%Y-%m-%d %H:%M:%S") }
+        footer = { text = "Free HUB • " .. os.date("%Y-%m-%d %H:%M:%S") }
     }
     
     local msg = {
