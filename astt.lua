@@ -936,6 +936,27 @@ else
         end
     end
     
+    local startedWithIncompleteQuest = false
+    task.spawn(function()
+        local t = 0
+        while t < 10 do
+            if util and util.data and util.data.quests then
+                for k, v in pairs(util.data.quests) do
+                    if v.progress < v.required then
+                        local lowerName = string.lower(v.name)
+                        if string.find(lowerName, "boss") or string.find(lowerName, "kill") or string.find(lowerName, "story") or string.find(lowerName, "any") or string.find(lowerName, "clear") then
+                            startedWithIncompleteQuest = true
+                            break
+                        end
+                    end
+                end
+                break
+            end
+            task.wait(1)
+            t = t + 1
+        end
+    end)
+    
     local isTeleporting = false
     
     local function forceTeleportToLobby(notifyTitle, notifyContent)
@@ -1133,7 +1154,7 @@ else
                         end
                     end
                     
-                    if not isTeleporting and Options.AutoQuest and Options.AutoQuest.Value and util and util.data and util.data.quests then
+                    if not isTeleporting and Options.AutoQuest and Options.AutoQuest.Value and startedWithIncompleteQuest and util and util.data and util.data.quests then
                         local hasIncompleteQuest = false
                         for k, v in pairs(util.data.quests) do
                             if v.progress < v.required then
