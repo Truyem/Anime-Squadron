@@ -587,16 +587,22 @@ if isLobby then
     pcall(function() util = require(Players.LocalPlayer.PlayerScripts.Client.Utility) end)
     
     local function joinRoom(act, diff, mode, world, rewards, capStr, maxCap, capType)
-        if capStr and maxCap and isfile and writefile then
-            pcall(function()
-                local dataToSave = {
-                    capStr = capStr,
-                    maxCap = maxCap,
-                    worldName = world,
-                    capType = capType
-                }
-                writefile("AnimeSquadron_CurrentTarget.json", HttpService:JSONEncode(dataToSave))
-            end)
+        if isfile and writefile then
+            if capStr and maxCap then
+                pcall(function()
+                    local dataToSave = {
+                        capStr = capStr,
+                        maxCap = maxCap,
+                        worldName = world,
+                        capType = capType
+                    }
+                    writefile("AnimeSquadron_CurrentTarget.json", HttpService:JSONEncode(dataToSave))
+                end)
+            else
+                if isfile("AnimeSquadron_CurrentTarget.json") and delfile then
+                    pcall(function() delfile("AnimeSquadron_CurrentTarget.json") end)
+                end
+            end
         end
 
         local success, err = create_room:InvokeServer({
