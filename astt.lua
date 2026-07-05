@@ -1133,6 +1133,22 @@ else
                         end
                     end
                     
+                    if not isTeleporting and Options.AutoQuest and Options.AutoQuest.Value and util and util.data and util.data.quests then
+                        local hasIncompleteQuest = false
+                        for k, v in pairs(util.data.quests) do
+                            if v.progress < v.required then
+                                local lowerName = string.lower(v.name)
+                                if string.find(lowerName, "boss") or string.find(lowerName, "kill") or string.find(lowerName, "story") or string.find(lowerName, "any") or string.find(lowerName, "clear") then
+                                    hasIncompleteQuest = true
+                                    break
+                                end
+                            end
+                        end
+                        if not hasIncompleteQuest then
+                            forceTeleportToLobby("Quest Completed!", "All farmable quests finished! Teleporting to Lobby...")
+                        end
+                    end
+                    
                     if not isTeleporting and Options.AutoLeaveToggle.Value and targetCapStr and targetMaxCap and util and util.data and util.data.caps then
                         local currentVal = util.data.caps[targetCapStr] or 0
                         print("[AutoFarm] Current Limit post-match: " .. currentVal .. " / " .. targetMaxCap)
