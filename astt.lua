@@ -853,10 +853,18 @@ if isLobby then
                                 end
                             else
                                 table.insert(activeQuestTexts, string.format("Craft Ready: %s x%d", targetName, targetQty))
-                                local succ, res = pcall(function() return game:GetService("ReplicatedStorage").Remotes.Crafting.craft:InvokeServer(targetName, targetQty) end)
-                                if succ and res then
+                                local craftedCount = 0
+                                for i = 1, targetQty do
+                                    local succ, res = pcall(function() return game:GetService("ReplicatedStorage").Remotes.Crafting.craft:InvokeServer(targetName) end)
+                                    if succ and res then
+                                        craftedCount = craftedCount + 1
+                                    end
+                                    task.wait(0.5)
+                                end
+                                
+                                if craftedCount > 0 then
                                     if Options.WebhookOnEvoCraft and Options.WebhookOnEvoCraft.Value then
-                                        if sendWebhookData then task.spawn(sendWebhookData, "CRAFT_SUCCESS", { name = targetName, qty = targetQty }) end
+                                        if sendWebhookData then task.spawn(sendWebhookData, "CRAFT_SUCCESS", { name = targetName, qty = craftedCount }) end
                                     end
                                     ToggleAutoCraft:SetValue(false)
                                 end
