@@ -790,7 +790,7 @@ if isLobby then
                                 table.insert(activeQuestTexts, string.format("Craft Ready: %s x%d", targetName, targetQty))
                                 local craftedCount = 0
                                 for i = 1, targetQty do
-                                    local succ, res = pcall(function() return game:GetService("ReplicatedStorage").Remotes.Crafting.craft:InvokeServer(targetName) end)
+                                    local succ, res = pcall(function() return game:GetService("ReplicatedStorage").Remotes.Crafting.craft:InvokeServer(targetName, 1) end)
                                     if succ and res then
                                         craftedCount = craftedCount + 1
                                     end
