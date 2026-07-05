@@ -1336,6 +1336,11 @@ end
             table.insert(droppedItems, "Reroll Cubes +" .. diffs.reroll)
             strReroll = tostring(rerollCubes - diffs.reroll) .. " + " .. diffs.reroll
         end
+        if diffs.units and type(diffs.units) == "table" and #diffs.units > 0 then
+            for _, unitName in ipairs(diffs.units) do
+                table.insert(droppedItems, "Unit Drop: " .. tostring(unitName))
+            end
+        end
     end
     
     local mapName = "Lobby"
@@ -1464,6 +1469,7 @@ local currentStatsLoop = _G.AnimeSquadronStatsLoop
 task.spawn(function()
     local util
     local lastTrait, lastPerfect, lastReroll = -1, -1, -1
+    local knownChars = nil
     while true do
         if _G.AnimeSquadronStatsLoop ~= currentStatsLoop then return end
         task.wait(5)
@@ -1473,7 +1479,14 @@ task.spawn(function()
             local currentPerfect = util.data.stats["Perfect Cubes"] or 0
             local currentReroll = util.data.stats["Reroll Cubes"] or 0
             
-            if lastTrait ~= -1 and lastPerfect ~= -1 and lastReroll ~= -1 then
+            local currentChars = {}
+            if util.data.characters then
+                for k, v in pairs(util.data.characters) do
+                    currentChars[k] = v.name
+                end
+            end
+            
+            if lastTrait ~= -1 and lastPerfect ~= -1 and lastReroll ~= -1 and knownChars ~= nil then
                 if SessionStats.StartTrait == -1 then
                     SessionStats.StartTrait = currentTrait
                     SessionStats.StartPerfect = currentPerfect
@@ -1486,7 +1499,14 @@ task.spawn(function()
                 local diffPerfect = currentPerfect - lastPerfect
                 local diffReroll = currentReroll - lastReroll
                 
-                if diffTrait > 0 or diffPerfect > 0 or diffReroll > 0 then
+                local droppedUnits = {}
+                for k, v in pairs(currentChars) do
+                    if not knownChars[k] then
+                        table.insert(droppedUnits, v)
+                    end
+                end
+                
+                if diffTrait > 0 or diffPerfect > 0 or diffReroll > 0 or #droppedUnits > 0 then
                     if diffTrait > 0 then SessionStats.TraitShards = SessionStats.TraitShards + diffTrait end
                     if diffPerfect > 0 then SessionStats.PerfectCubes = SessionStats.PerfectCubes + diffPerfect end
                     if diffReroll > 0 then SessionStats.RerollCubes = SessionStats.RerollCubes + diffReroll end
@@ -1498,7 +1518,8 @@ task.spawn(function()
                         sendWebhookData("DROP", {
                             trait = diffTrait,
                             perfect = diffPerfect,
-                            reroll = diffReroll
+                            reroll = diffReroll,
+                            units = droppedUnits
                         })
                         task.wait(10)
                     end
@@ -1507,6 +1528,7 @@ task.spawn(function()
             lastTrait = currentTrait
             lastPerfect = currentPerfect
             lastReroll = currentReroll
+            knownChars = currentChars
         end
     end
 end)
