@@ -220,6 +220,7 @@ else
 end
 
 Tabs.Ingame:AddParagraph({ Title = "Ingame Utilities", Content = "Only active during a match." })
+local ToggleAutoPlay = Tabs.Ingame:AddToggle("AutoPlayToggle", { Title = "ENABLE Official Auto Play", Default = false })
 local ToggleLeave = Tabs.Ingame:AddToggle("AutoLeaveToggle", { Title = "ENABLE Auto Leave (On Max Limit/Cant Replay)", Default = false })
 local ToggleLeaveBase = Tabs.Ingame:AddToggle("AutoLeaveBaseFailsafe", { Title = "ENABLE Auto Leave (Base 0 HP Failsafe)", Default = false })
 local ToggleReplay = Tabs.Ingame:AddToggle("AutoReplayToggle", { Title = "ENABLE Auto Replay", Default = false })
@@ -1030,6 +1031,37 @@ else
                     local res, msg = Event:InvokeServer(3)
                     if res == false and type(msg) == "string" and string.find(string.lower(msg), "pass") then
                         Event:InvokeServer(2)
+                    end
+                end)
+            end
+            
+            if Options.AutoPlayToggle and Options.AutoPlayToggle.Value then
+                pcall(function()
+                    -- Try to invoke remote directly with 'true' to force it ON
+                    local remotes = game:GetService("ReplicatedStorage").Remotes.Game
+                    local ap = remotes:FindFirstChild("change_auto_play") or remotes:FindFirstChild("auto_play") or remotes:FindFirstChild("autoplay")
+                    if ap then
+                        if ap:IsA("RemoteFunction") then ap:InvokeServer(true) else ap:FireServer(true) end
+                    else
+                        -- Fallback to UI click if not already ON
+                        local apGui = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("AutoPlay", true) or game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("Auto_Play", true)
+                        if apGui then
+                            local isOn = false
+                            for _, child in pairs(apGui:GetDescendants()) do
+                                if child:IsA("TextLabel") and (string.lower(child.Text) == "on" or string.find(string.lower(child.Text), "enabled")) then
+                                    isOn = true
+                                    break
+                                end
+                            end
+                            if not isOn then
+                                local btn = apGui
+                                if not btn:IsA("GuiButton") then btn = apGui:FindFirstChildOfClass("TextButton") or apGui:FindFirstChildOfClass("ImageButton") end
+                                if btn and getconnections then
+                                    local conn = getconnections(btn.MouseButton1Click)[1] or getconnections(btn.Activated)[1]
+                                    if conn then conn:Fire() end
+                                end
+                            end
+                        end
                     end
                 end)
             end
