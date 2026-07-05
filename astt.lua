@@ -835,6 +835,12 @@ if isLobby then
                 local succ, challengeData = pcall(function() return get_challenges:InvokeServer() end)
                 local joinedSomething = false
                 
+                if succ and type(challengeData) == "table" then
+                    if isfile and writefile then
+                        pcall(function() writefile("AnimeSquadron_LastSnipeCheck.txt", tostring(math.floor(os.time() / 1800))) end)
+                    end
+                end
+                
                 if activeQuestMap then
                     if activeQuestMap.mode == "Story" then
                         Fluent:Notify({ Title = "Auto Quest", Content = "Joining Ninja Village Act 1 for Quest!", Duration = 3 })
@@ -844,10 +850,6 @@ if isLobby then
                 end
                 
                 if not joinedSomething and succ and type(challengeData) == "table" then
-                    if isfile and writefile then
-                        pcall(function() writefile("AnimeSquadron_LastSnipeCheck.txt", tostring(math.floor(os.time() / 1800))) end)
-                    end
-                    
                     if Options.AutoJoin1d.Value and challengeData["1d"] then
                         local chData = challengeData["1d"]
                         if chData.world ~= lastDailyWorld or chData.act ~= lastDailyAct then
