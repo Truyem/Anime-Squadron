@@ -71,16 +71,17 @@ if isLobby then
                             for act, items in pairs(acts) do
                                 if type(items) == "table" then
                                     for itemName, _ in pairs(items) do
-                                        if itemName ~= "Gems" and itemName ~= "XP" and itemName ~= "Gold" and itemName ~= "Trait Shards" and itemName ~= "Senzu" and itemName ~= "Energy" then
-                                            if not _G.MATERIAL_DROPS[itemName] then
-                                                _G.MATERIAL_DROPS[itemName] = { world = world.name, mode = mode, acts = {act} }
+                                        local cleanName = string.lower(tostring(itemName))
+                                        if cleanName ~= "gems" and cleanName ~= "xp" and cleanName ~= "gold" and cleanName ~= "trait shards" and cleanName ~= "senzu" and cleanName ~= "energy" then
+                                            if not _G.MATERIAL_DROPS[cleanName] then
+                                                _G.MATERIAL_DROPS[cleanName] = { world = world.name, mode = mode, acts = {act} }
                                             else
                                                 local hasAct = false
-                                                for _, v in ipairs(_G.MATERIAL_DROPS[itemName].acts) do
+                                                for _, v in ipairs(_G.MATERIAL_DROPS[cleanName].acts) do
                                                     if v == act then hasAct = true break end
                                                 end
                                                 if not hasAct then
-                                                    table.insert(_G.MATERIAL_DROPS[itemName].acts, act)
+                                                    table.insert(_G.MATERIAL_DROPS[cleanName].acts, act)
                                                 end
                                             end
                                         end
@@ -95,17 +96,33 @@ if isLobby then
         if isfile and writefile then
             pcall(function() writefile("AnimeSquadron_MatCache.json", HttpService:JSONEncode(_G.MATERIAL_DROPS)) end)
         end
+    else
+        local function loadCache()
+            if isfile and readfile and isfile("AnimeSquadron_MatCache.json") then
+                pcall(function() _G.MATERIAL_DROPS = HttpService:JSONDecode(readfile("AnimeSquadron_MatCache.json")) end)
+            end
+            if isfile and readfile and isfile("AnimeSquadron_MapsCache.json") then
+                local succ2, data2 = pcall(function() return HttpService:JSONDecode(readfile("AnimeSquadron_MapsCache.json")) end)
+                if succ2 and type(data2) == "table" then
+                    traitMaps = data2
+                end
+            end
+        end
+        loadCache()
     end
 else
-    if isfile and readfile and isfile("AnimeSquadron_MatCache.json") then
-        pcall(function() _G.MATERIAL_DROPS = HttpService:JSONDecode(readfile("AnimeSquadron_MatCache.json")) end)
-    end
-    if isfile and readfile and isfile("AnimeSquadron_MapsCache.json") then
-        local succ, data = pcall(function() return HttpService:JSONDecode(readfile("AnimeSquadron_MapsCache.json")) end)
-        if succ and type(data) == "table" then
-            traitMaps = data
+    local function loadCache()
+        if isfile and readfile and isfile("AnimeSquadron_MatCache.json") then
+            pcall(function() _G.MATERIAL_DROPS = HttpService:JSONDecode(readfile("AnimeSquadron_MatCache.json")) end)
+        end
+        if isfile and readfile and isfile("AnimeSquadron_MapsCache.json") then
+            local succ, data = pcall(function() return HttpService:JSONDecode(readfile("AnimeSquadron_MapsCache.json")) end)
+            if succ and type(data) == "table" then
+                traitMaps = data
+            end
         end
     end
+    loadCache()
 end
 
 local Window = Fluent:CreateWindow({
@@ -155,7 +172,7 @@ if isLobby then
             local succ, data = pcall(function() return get_challenges:InvokeServer() end)
             if succ and type(data) == "table" then
                 for chType, chData in pairs(data) do
-                    if chData.rewards then
+                    if type(chData) == "table" and chData.rewards then
                         for rewardName, _ in pairs(chData.rewards) do
                             if not table.find(itemsList, rewardName) then
                                 table.insert(itemsList, rewardName)
@@ -169,7 +186,7 @@ if isLobby then
             send_challenges.OnClientEvent:Connect(function(data)
                 if type(data) == "table" then
                     for chType, chData in pairs(data) do
-                        if chData.rewards then
+                        if type(chData) == "table" and chData.rewards then
                             for rewardName, _ in pairs(chData.rewards) do
                                 if not table.find(itemDropdown.Values, rewardName) then
                                     local current = itemDropdown.Values
@@ -240,7 +257,20 @@ local DropdownSniperSyncMode = Tabs.Ingame:AddDropdown("SniperSyncMode", {
 -- === EVO & CRAFT UI ===
 Tabs.EvoCraft:AddParagraph({ Title = "Evo & Craft Priority", Content = "Runs in the Lobby. Lower priority than Auto Quest. Evo and Craft will NOT run simultaneously." })
 
-local DropdownEvoTarget = Tabs.EvoCraft:AddDropdown("EvoTarget", { Title = "Evo Target", Values = {"(Waiting for Inventory...)"}, Multi = false, Default = 1 })
+local function getSavedTarget(key, defaultVal)
+    local saved = defaultVal
+    if isfile and readfile and isfile("AnimeSquadronSettings/AutoFarm/settings/AutoSave.json") then
+        local succ, content = pcall(function() return readfile("AnimeSquadronSettings/AutoFarm/settings/AutoSave.json") end)
+        if succ and type(content) == "string" then
+            local match = string.match(content, '"idx"%s*:%s*"' .. key .. '".-"value"%s*:%s*"([^"]+)"')
+            if match then saved = match end
+        end
+    end
+    return saved
+end
+
+local initEvo = getSavedTarget("EvoTarget", "(Waiting for Inventory...)")
+local DropdownEvoTarget = Tabs.EvoCraft:AddDropdown("EvoTarget", { Title = "Evo Target", Values = {initEvo}, Multi = false, Default = 1 })
 
 if isLobby then
     task.spawn(function()
@@ -268,12 +298,12 @@ if isLobby then
         end
     end)
 end
-local InputEvoQty = Tabs.EvoCraft:AddInput("EvoQty", { Title = "Quantity to Evo", Default = "1", Numeric = true, Finished = false })
 local ToggleAutoEvo = Tabs.EvoCraft:AddToggle("AutoEvo", { Title = "ENABLE Auto Evo", Default = false })
 
 Tabs.EvoCraft:AddParagraph({ Title = "---", Content = "" })
 
-local DropdownCraftTarget = Tabs.EvoCraft:AddDropdown("CraftTarget", { Title = "Craft Target", Values = {"(Loading Craftables...)"}, Multi = false, Default = 1 })
+local initCraft = getSavedTarget("CraftTarget", "(Loading Craftables...)")
+local DropdownCraftTarget = Tabs.EvoCraft:AddDropdown("CraftTarget", { Title = "Craft Target", Values = {initCraft}, Multi = false, Default = 1 })
 
 task.spawn(function()
     local craftTargets = {}
@@ -346,11 +376,14 @@ local DropdownEventShopItem = Tabs.ShopUpgrade:AddDropdown("EventShopItem", { Ti
 local ToggleAutoBuyEvent = Tabs.ShopUpgrade:AddToggle("AutoBuyEvent", { Title = "ENABLE Auto Buy [Event Shop]", Default = false })
 
 if isLobby then
+    _G.AnimeSquadronShopLoop = (_G.AnimeSquadronShopLoop or 0) + 1
+    local currentLoopId = _G.AnimeSquadronShopLoop
     task.spawn(function()
         local get = game:GetService("ReplicatedStorage").Remotes.Shops:WaitForChild("get", 5)
         if not get then return end
         
         while task.wait(10) do
+            if _G.AnimeSquadronShopLoop ~= currentLoopId then return end
             local function updateShop(shopId, dropdown)
                 local succ, data = pcall(function() return get:InvokeServer(shopId) end)
                 if succ and type(data) == "table" then
@@ -551,13 +584,14 @@ if isLobby then
     local util
     pcall(function() util = require(Players.LocalPlayer.PlayerScripts.Client.Utility) end)
     
-    local function joinRoom(act, diff, mode, world, rewards, capStr, maxCap)
+    local function joinRoom(act, diff, mode, world, rewards, capStr, maxCap, capType)
         if capStr and maxCap and isfile and writefile then
             pcall(function()
                 local dataToSave = {
                     capStr = capStr,
                     maxCap = maxCap,
-                    worldName = world
+                    worldName = world,
+                    capType = capType
                 }
                 writefile("AnimeSquadron_CurrentTarget.json", HttpService:JSONEncode(dataToSave))
             end)
@@ -599,10 +633,13 @@ if isLobby then
         return validMaps
     end
     
+    _G.AnimeSquadronMainLoop = (_G.AnimeSquadronMainLoop or 0) + 1
+    local currentLoopId = _G.AnimeSquadronMainLoop
     task.spawn(function()
         local lastClaimTime = 0
         while true do
             task.wait(3)
+            if _G.AnimeSquadronMainLoop ~= currentLoopId then return end
             
             if os.time() - lastClaimTime > 60 then
                 lastClaimTime = os.time()
@@ -705,56 +742,60 @@ if isLobby then
                 
                 if doingEvo then
                     local targetName = Options.EvoTarget.Value
-                    local targetQty = tonumber(Options.EvoQty.Value) or 1
-                    
-                    local template = game:GetService("ReplicatedStorage").Characters:FindFirstChild(targetName)
-                    if template and template:FindFirstChild("data") then
-                        local data = require(template.data)
-                        local evoData = data.evolution or data.awakening or data.evolve or data.evo
-                        if evoData and evoData.cost then
-                            local missingMats = {}
-                            local totalMissingCount = 0
-                            
-                            local isMissingGold = false
-                            for matName, requiredPerEvo in pairs(evoData.cost) do
-                                local totalRequired = requiredPerEvo * targetQty
-                                local have = (util.data.items and util.data.items[matName] or 0) + (util.data.stats and util.data.stats[matName] or 0)
-                                if have < totalRequired then
-                                    totalMissingCount = totalMissingCount + 1
-                                    table.insert(missingMats, { name = matName, short = totalRequired - have })
-                                    if string.lower(matName) == "gold" then isMissingGold = true end
+                    if targetName ~= "(None)" and targetName ~= "(Waiting for Inventory...)" then
+                        local targetQty = 1
+                        
+                        local template = game:GetService("ReplicatedStorage").Characters:FindFirstChild(targetName)
+                        if template and template:FindFirstChild("data") then
+                            local data = require(template.data)
+                            local evoData = data.evolution or data.awakening or data.evolve or data.evo
+                            if evoData and evoData.cost then
+                                local missingMats = {}
+                                local totalMissingCount = 0
+                                
+                                local isMissingGold = false
+                                for matName, requiredPerEvo in pairs(evoData.cost) do
+                                    local totalRequired = requiredPerEvo * targetQty
+                                    local have = (util.data.items and util.data.items[matName] or 0) + (util.data.stats and util.data.stats[matName] or 0)
+                                    if have < totalRequired then
+                                        totalMissingCount = totalMissingCount + 1
+                                        table.insert(missingMats, { name = matName, short = totalRequired - have, total = totalRequired })
+                                        if string.lower(matName) == "gold" then isMissingGold = true end
+                                    end
                                 end
-                            end
-                            
-                            if isMissingGold then
-                                ToggleAutoEvo:SetValue(false)
-                                if Options.WebhookOnEvoCraft and Options.WebhookOnEvoCraft.Value then
-                                    if sendWebhookData then task.spawn(sendWebhookData, "EVO_FAIL", { name = targetName }) end
-                                end
-                            elseif totalMissingCount > 0 then
-                                local mat = missingMats[1]
-                                table.insert(activeQuestTexts, string.format("Evo Farming: %s (Need %d %s)", targetName, mat.short, mat.name))
-                                if _G.MATERIAL_DROPS and _G.MATERIAL_DROPS[mat.name] then
-                                    local dropInfo = _G.MATERIAL_DROPS[mat.name]
-                                    activeQuestMap = { mode = dropInfo.mode, world = dropInfo.world, act = dropInfo.acts[#dropInfo.acts], diff = "Hard" }
-                                end
-                            else
-                                table.insert(activeQuestTexts, string.format("Evo Ready: %s x%d", targetName, targetQty))
-                                local evolvedCount = 0
-                                if util.data.characters then
-                                    for id, charData in pairs(util.data.characters) do
-                                        if charData.name == targetName then
-                                            local succ, res = pcall(function() return game:GetService("ReplicatedStorage").Remotes.Awakening.awaken:InvokeServer(id) end)
-                                            if succ and res then
-                                                evolvedCount = evolvedCount + 1
-                                                if Options.WebhookOnEvoCraft and Options.WebhookOnEvoCraft.Value then
-                                                    if sendWebhookData then task.spawn(sendWebhookData, "EVO_SUCCESS", { name = targetName, qty = targetQty }) end
+                                
+                                if isMissingGold then
+                                    ToggleAutoEvo:SetValue(false)
+                                    Fluent:Notify({ Title = "Auto Evo", Content = "Missing Gold! Cannot farm Gold. Auto Evo disabled.", Duration = 5 })
+                                    if Options.WebhookOnEvoCraft and Options.WebhookOnEvoCraft.Value then
+                                        if sendWebhookData then task.spawn(sendWebhookData, "EVO_FAIL", { name = targetName }) end
+                                    end
+                                elseif totalMissingCount > 0 then
+                                    local mat = missingMats[1]
+                                    table.insert(activeQuestTexts, string.format("Evo Farming: %s (Need %d %s)", targetName, mat.short, mat.name))
+                                    local cleanMatName = string.lower(tostring(mat.name))
+                                    if _G.MATERIAL_DROPS and _G.MATERIAL_DROPS[cleanMatName] then
+                                        local dropInfo = _G.MATERIAL_DROPS[cleanMatName]
+                                        activeQuestMap = { mode = dropInfo.mode, world = dropInfo.world, act = dropInfo.acts[#dropInfo.acts], diff = "Hard", isMat = true, matName = mat.name, maxCap = mat.total }
+                                    end
+                                else
+                                    table.insert(activeQuestTexts, string.format("Evo Ready: %s x%d", targetName, targetQty))
+                                    local evolvedCount = 0
+                                    if util.data.characters then
+                                        for id, charData in pairs(util.data.characters) do
+                                            if charData.name == targetName then
+                                                local succ, res = pcall(function() return game:GetService("ReplicatedStorage").Remotes.Awakening.awaken:InvokeServer(id) end)
+                                                if succ and res then
+                                                    evolvedCount = evolvedCount + 1
+                                                    if Options.WebhookOnEvoCraft and Options.WebhookOnEvoCraft.Value then
+                                                        if sendWebhookData then task.spawn(sendWebhookData, "EVO_SUCCESS", { name = targetName, qty = targetQty }) end
+                                                    end
+                                                    if evolvedCount >= targetQty then
+                                                        ToggleAutoEvo:SetValue(false)
+                                                        break
+                                                    end
+                                                    task.wait(1)
                                                 end
-                                                if evolvedCount >= targetQty then
-                                                    ToggleAutoEvo:SetValue(false)
-                                                    break
-                                                end
-                                                task.wait(1)
                                             end
                                         end
                                     end
@@ -762,7 +803,9 @@ if isLobby then
                             end
                         end
                     end
-                elseif doingCraft then
+                end
+                
+                if not activeQuestMap and doingCraft then
                     local targetName = Options.CraftTarget.Value
                     local targetQty = tonumber(Options.CraftQty.Value) or 1
                     
@@ -781,22 +824,24 @@ if isLobby then
                                 local have = (util.data.items and util.data.items[matName] or 0) + (util.data.stats and util.data.stats[matName] or 0)
                                 if have < totalRequired then
                                     totalMissingCount = totalMissingCount + 1
-                                    table.insert(missingMats, { name = matName, short = totalRequired - have })
+                                    table.insert(missingMats, { name = matName, short = totalRequired - have, total = totalRequired })
                                     if string.lower(matName) == "gold" then isMissingGold = true end
                                 end
                             end
                             
                             if isMissingGold then
                                 ToggleAutoCraft:SetValue(false)
+                                Fluent:Notify({ Title = "Auto Craft", Content = "Missing Gold! Cannot farm Gold. Auto Craft disabled.", Duration = 5 })
                                 if Options.WebhookOnEvoCraft and Options.WebhookOnEvoCraft.Value then
                                     if sendWebhookData then task.spawn(sendWebhookData, "CRAFT_FAIL", { name = targetName }) end
                                 end
                             elseif totalMissingCount > 0 then
                                 local mat = missingMats[1]
                                 table.insert(activeQuestTexts, string.format("Craft Farming: %s (Need %d %s)", targetName, mat.short, mat.name))
-                                if _G.MATERIAL_DROPS and _G.MATERIAL_DROPS[mat.name] then
-                                    local dropInfo = _G.MATERIAL_DROPS[mat.name]
-                                    activeQuestMap = { mode = dropInfo.mode, world = dropInfo.world, act = dropInfo.acts[#dropInfo.acts], diff = "Hard" }
+                                local cleanMatName = string.lower(tostring(mat.name))
+                                if _G.MATERIAL_DROPS and _G.MATERIAL_DROPS[cleanMatName] then
+                                    local dropInfo = _G.MATERIAL_DROPS[cleanMatName]
+                                    activeQuestMap = { mode = dropInfo.mode, world = dropInfo.world, act = dropInfo.acts[#dropInfo.acts], diff = "Hard", isMat = true, matName = mat.name, maxCap = mat.total }
                                 end
                             else
                                 table.insert(activeQuestTexts, string.format("Craft Ready: %s x%d", targetName, targetQty))
@@ -842,62 +887,49 @@ if isLobby then
                     end
                 end
                 
+                local shouldSnipe30m = false
+                if succ and type(challengeData) == "table" and Options.AutoJoin30m.Value and challengeData["30m"] then
+                    local chData = challengeData["30m"]
+                    local targets = Options.TargetItem30m.Value
+                    if chData.rewards and type(targets) == "table" then
+                        for rewardName, _ in pairs(chData.rewards) do
+                            if targets[rewardName] then
+                                shouldSnipe30m = true
+                                break
+                            end
+                        end
+                    end
+                end
+                
+                if succ and type(challengeData) == "table" and Options.AutoJoin1d.Value and challengeData["1d"] then
+                    local chData = challengeData["1d"]
+                    if chData.world ~= lastDailyWorld or chData.act ~= lastDailyAct then
+                        dailyCompleted = false
+                        lastDailyWorld = chData.world
+                        lastDailyAct = chData.act
+                    end
+                end
+                
                 if activeQuestMap then
-                    if activeQuestMap.mode == "Story" then
+                    if activeQuestMap.isMat then
+                        Fluent:Notify({ Title = "Auto Farm", Content = "Farming Material: " .. tostring(activeQuestMap.matName), Duration = 3 })
+                        joinRoom(activeQuestMap.act, activeQuestMap.diff, activeQuestMap.mode, activeQuestMap.world, nil, activeQuestMap.matName, activeQuestMap.maxCap, "Item")
+                    elseif activeQuestMap.mode == "Story" then
                         Fluent:Notify({ Title = "Auto Quest", Content = "Joining Ninja Village Act 1 for Quest!", Duration = 3 })
-                        local s = joinRoom(activeQuestMap.act, activeQuestMap.diff, activeQuestMap.mode, activeQuestMap.world, nil, nil, nil)
-                        if s then joinedSomething = true end
+                        joinRoom(activeQuestMap.act, activeQuestMap.diff, activeQuestMap.mode, activeQuestMap.world, nil, nil, nil)
                     end
-                end
-                
-                if not joinedSomething and succ and type(challengeData) == "table" then
-                    if Options.AutoJoin1d.Value and challengeData["1d"] then
-                        local chData = challengeData["1d"]
-                        if chData.world ~= lastDailyWorld or chData.act ~= lastDailyAct then
-                            dailyCompleted = false
-                            lastDailyWorld = chData.world
-                            lastDailyAct = chData.act
-                        end
-                        
-                        if not dailyCompleted then
-                            Fluent:Notify({ Title = "Sniper", Content = "Joining Daily Challenge!", Duration = 3 })
-                            local s, err = joinRoom(chData.act, "1d", "Challenge", chData.world, chData.rewards, nil, nil)
-                            if not s then
-                                if err == "Already completed!" then
-                                    dailyCompleted = true
-                                end
-                            else
-                                joinedSomething = true
-                            end
-                        end
+                elseif succ and type(challengeData) == "table" and Options.AutoJoin1d.Value and challengeData["1d"] and not dailyCompleted then
+                    Fluent:Notify({ Title = "Sniper", Content = "Joining Daily Challenge!", Duration = 3 })
+                    local s, err = joinRoom(challengeData["1d"].act, "1d", "Challenge", challengeData["1d"].world, challengeData["1d"].rewards, nil, nil)
+                    if not s and err == "Already completed!" then
+                        dailyCompleted = true
                     end
-                    
-                    if not joinedSomething and Options.AutoJoin30m.Value and challengeData["30m"] then
-                        local chData = challengeData["30m"]
-                        local shouldJoin = false
-                        local targets = Options.TargetItem30m.Value
-                        
-                        if chData.rewards and type(targets) == "table" then
-                            for rewardName, _ in pairs(chData.rewards) do
-                                if targets[rewardName] then
-                                    shouldJoin = true
-                                    break
-                                end
-                            end
-                        end
-                        
-                        if shouldJoin then
-                            Fluent:Notify({ Title = "Sniper", Content = "Target found! Joining Regular 30m!", Duration = 3 })
-                            local s, err = joinRoom(chData.act, "30m", "Challenge", chData.world, chData.rewards, nil, nil)
-                            if s then joinedSomething = true end
-                        end
-                    end
-                end
-                
-                if not joinedSomething then
+                elseif shouldSnipe30m then
+                    Fluent:Notify({ Title = "Sniper", Content = "Target found! Joining Regular 30m!", Duration = 3 })
+                    joinRoom(challengeData["30m"].act, "30m", "Challenge", challengeData["30m"].world, challengeData["30m"].rewards, nil, nil)
+                else
                     local targetData = nil
                     local sortedMaps = getSortedValidTraitMaps()
-                    
                     for _, data in ipairs(sortedMaps) do
                         local currentCap = util and util.data and util.data.caps and util.data.caps[data.cfg.capStr] or 0
                         if currentCap < data.cfg.mapData.cap then
@@ -908,8 +940,7 @@ if isLobby then
                     
                     if targetData then
                         Fluent:Notify({ Title = "Trait Farm", Content = "Joining: " .. targetData.cfg.mapData.world .. " (" .. targetData.difficulty .. ")", Duration = 3 })
-                        local s, err = joinRoom(targetData.cfg.mapData.act, targetData.difficulty, targetData.cfg.mapData.mode, targetData.cfg.mapData.world, nil, targetData.cfg.capStr, targetData.cfg.mapData.cap)
-                        if s then joinedSomething = true end
+                        joinRoom(targetData.cfg.mapData.act, targetData.difficulty, targetData.cfg.mapData.mode, targetData.cfg.mapData.world, nil, targetData.cfg.capStr, targetData.cfg.mapData.cap)
                     end
                 end
             end
@@ -927,20 +958,25 @@ else
     
     local targetCapStr = nil
     local targetMaxCap = nil
+    local targetCapType = nil
     
     if isfile and readfile and isfile("AnimeSquadron_CurrentTarget.json") then
         local succ, parsed = pcall(function() return HttpService:JSONDecode(readfile("AnimeSquadron_CurrentTarget.json")) end)
         if succ and parsed then
             targetCapStr = parsed.capStr
             targetMaxCap = parsed.maxCap
-            print("[AutoFarm] Limit data loaded: " .. tostring(targetCapStr) .. " (Max: " .. tostring(targetMaxCap) .. ")")
+            targetCapType = parsed.capType
+            print("[AutoFarm] Limit data loaded: " .. tostring(targetCapStr) .. " (Max: " .. tostring(targetMaxCap) .. ") Type: " .. tostring(targetCapType))
         end
     end
     
     local startedWithIncompleteQuest = false
+    _G.AnimeSquadronFarmRunning = (_G.AnimeSquadronFarmRunning or 0) + 1
+    local currentFarmLoop = _G.AnimeSquadronFarmRunning
     task.spawn(function()
         local t = 0
-        while t < 10 do
+        while true do
+            if _G.AnimeSquadronFarmRunning ~= currentFarmLoop then return end
             if util and util.data and util.data.quests then
                 for k, v in pairs(util.data.quests) do
                     if v.progress < v.required then
@@ -999,8 +1035,11 @@ else
     
     local baseZeroTime = nil
     
+    _G.AnimeSquadronMainLoop = (_G.AnimeSquadronMainLoop or 0) + 1
+    local currentMainLoop = _G.AnimeSquadronMainLoop
     task.spawn(function()
         while true do
+            if _G.AnimeSquadronMainLoop ~= currentMainLoop then return end
             task.wait(2)
             
             if Options.AutoQuest and Options.AutoQuest.Value and util and util.data and util.data.quests then
@@ -1015,14 +1054,28 @@ else
                         end
                     end
                 end
-                
-                if StatusParagraph then
-                    if #activeQuestTexts > 0 then
-                        StatusParagraph:SetDesc("NOTE: Auto Farm functions will NOT operate while in-game. It will resume automatically in the Lobby.\n" .. table.concat(activeQuestTexts, "\n"))
-                    else
-                        StatusParagraph:SetDesc("NOTE: Auto Farm functions will NOT operate while in-game. It will resume automatically in the Lobby.")
-                    end
+            end
+            
+            local activeTexts = {}
+            if targetCapStr and targetMaxCap and util and util.data then
+                local currentVal = 0
+                if targetCapType == "Item" then
+                    currentVal = (util.data.items and util.data.items[targetCapStr] or 0) + (util.data.stats and util.data.stats[targetCapStr] or 0)
+                else
+                    currentVal = util.data.caps and util.data.caps[targetCapStr] or 0
                 end
+                table.insert(activeTexts, "Current Goal: " .. tostring(targetCapStr) .. " [" .. currentVal .. " / " .. targetMaxCap .. "]")
+            end
+            
+            if StatusParagraph then
+                local fullText = "NOTE: Auto Farm functions will NOT operate while in-game. It will resume automatically in the Lobby."
+                if activeQuestTexts and #activeQuestTexts > 0 then
+                    fullText = fullText .. "\n" .. table.concat(activeQuestTexts, "\n")
+                end
+                if #activeTexts > 0 then
+                    fullText = fullText .. "\n" .. table.concat(activeTexts, "\n")
+                end
+                StatusParagraph:SetDesc(fullText)
             end
             
             if Options.AutoSpeedToggle and Options.AutoSpeedToggle.Value then
@@ -1147,8 +1200,11 @@ else
     end)
     
     local webhookSentForMatch = false
+    _G.AnimeSquadronMatchLoop = (_G.AnimeSquadronMatchLoop or 0) + 1
+    local currentMatchLoop = _G.AnimeSquadronMatchLoop
     task.spawn(function()
         while true do
+            if _G.AnimeSquadronMatchLoop ~= currentMatchLoop then return end
             task.wait(2)
             local menus = Players.LocalPlayer.PlayerGui:FindFirstChild("Menus")
             if menus then
@@ -1354,8 +1410,11 @@ Tabs.Webhook:AddButton({
     end
 })
 
+_G.AnimeSquadronIntervalLoop = (_G.AnimeSquadronIntervalLoop or 0) + 1
+local currentIntervalLoop = _G.AnimeSquadronIntervalLoop
 task.spawn(function()
     while true do
+        if _G.AnimeSquadronIntervalLoop ~= currentIntervalLoop then return end
         task.wait(60)
         if Options.WebhookOnInterval and Options.WebhookOnInterval.Value and Options.WebhookURL and Options.WebhookURL.Value ~= "" then
             local interval = tonumber(Options.WebhookInterval.Value) or 10
@@ -1374,10 +1433,13 @@ task.spawn(function()
     end
 end)
 
+_G.AnimeSquadronStatsLoop = (_G.AnimeSquadronStatsLoop or 0) + 1
+local currentStatsLoop = _G.AnimeSquadronStatsLoop
 task.spawn(function()
     local util
     local lastTrait, lastPerfect, lastReroll = -1, -1, -1
     while true do
+        if _G.AnimeSquadronStatsLoop ~= currentStatsLoop then return end
         task.wait(5)
         pcall(function() util = require(game:GetService("Players").LocalPlayer.PlayerScripts.Client.Utility) end)
         if util and util.data and util.data.stats then
