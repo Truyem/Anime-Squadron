@@ -241,6 +241,8 @@ local ToggleAutoPlay = Tabs.Ingame:AddToggle("AutoPlayToggle", { Title = "ENABLE
 local ToggleLeave = Tabs.Ingame:AddToggle("AutoLeaveToggle", { Title = "ENABLE Auto Leave (On Max Limit/Cant Replay)", Default = false })
 local ToggleLeaveBase = Tabs.Ingame:AddToggle("AutoLeaveBaseFailsafe", { Title = "ENABLE Auto Leave (Base 0 HP Failsafe)", Default = false })
 local ToggleReplay = Tabs.Ingame:AddToggle("AutoReplayToggle", { Title = "ENABLE Auto Replay", Default = false })
+local ToggleReplayAtWave = Tabs.Ingame:AddToggle("AutoReplayAtWave", { Title = "ENABLE Auto Replay at Wave (Inf Mode)", Default = false })
+local InputReplayWave = Tabs.Ingame:AddInput("ReplayWaveTarget", { Title = "Target Wave to Replay", Default = "30", Numeric = true, Finished = false })
 local ToggleSpeed = Tabs.Ingame:AddToggle("AutoSpeedToggle", { Title = "ENABLE Auto Speed (Max 2x/3x)", Default = false })
 local ToggleUltimate = Tabs.Ingame:AddToggle("AutoUltimateToggle", { Title = "ENABLE Auto Ultimate (Only when Enemies present)", Default = false })
 
@@ -1090,30 +1092,12 @@ else
             
             if Options.AutoPlayToggle and Options.AutoPlayToggle.Value then
                 pcall(function()
-                    -- Try to invoke remote directly with 'true' to force it ON
-                    local remotes = game:GetService("ReplicatedStorage").Remotes.Game
-                    local ap = remotes:FindFirstChild("change_auto_play") or remotes:FindFirstChild("auto_play") or remotes:FindFirstChild("autoplay")
-                    if ap then
-                        if ap:IsA("RemoteFunction") then ap:InvokeServer(true) else ap:FireServer(true) end
-                    else
-                        -- Fallback to UI click if not already ON
-                        local apGui = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("AutoPlay", true) or game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("Auto_Play", true)
-                        if apGui then
-                            local isOn = false
-                            for _, child in pairs(apGui:GetDescendants()) do
-                                if child:IsA("TextLabel") and (string.lower(child.Text) == "on" or string.find(string.lower(child.Text), "enabled")) then
-                                    isOn = true
-                                    break
-                                end
-                            end
-                            if not isOn then
-                                local btn = apGui
-                                if not btn:IsA("GuiButton") then btn = apGui:FindFirstChildOfClass("TextButton") or apGui:FindFirstChildOfClass("ImageButton") end
-                                if btn and getconnections then
-                                    local conn = getconnections(btn.MouseButton1Click)[1] or getconnections(btn.Activated)[1]
-                                    if conn then conn:Fire() end
-                                end
-                            end
+                    if util and util.data and not util.data.autoplay then
+                        local Event = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
+                        if Event then Event = Event:FindFirstChild("Characters") end
+                        if Event then Event = Event:FindFirstChild("autoplay") end
+                        if Event and Event:IsA("RemoteFunction") then
+                            Event:InvokeServer()
                         end
                     end
                 end)
@@ -1140,6 +1124,30 @@ else
                         end
                     end
                 end
+            end
+            
+            if Options.AutoReplayAtWave and Options.AutoReplayAtWave.Value and not isTeleporting then
+                pcall(function()
+                    local waveGui = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("Wave", true)
+                    if waveGui then
+                        local amountLbl = waveGui:FindFirstChild("Amount") or waveGui:FindFirstChild("WaveInfo")
+                        if amountLbl and amountLbl:IsA("TextLabel") then
+                            local currentWave = tonumber(amountLbl.Text)
+                            local targetWave = tonumber(Options.ReplayWaveTarget.Value) or 30
+                            if currentWave and currentWave >= targetWave then
+                                isTeleporting = true
+                                Fluent:Notify({ Title = "Auto Inf", Content = "Reached Wave " .. currentWave .. "! Replaying...", Duration = 5 })
+                                if replayEvent then
+                                    pcall(function() replayEvent:FireServer() end)
+                                    task.spawn(function()
+                                        task.wait(10)
+                                        isTeleporting = false
+                                    end)
+                                end
+                            end
+                        end
+                    end
+                end)
             end
             
             if not isTeleporting and Options.AutoLeaveBaseFailsafe and Options.AutoLeaveBaseFailsafe.Value then
