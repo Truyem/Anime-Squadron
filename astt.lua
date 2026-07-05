@@ -1067,6 +1067,10 @@ else
                     currentVal = util.data.caps and util.data.caps[targetCapStr] or 0
                 end
                 table.insert(activeTexts, "Current Goal: " .. tostring(targetCapStr) .. " [" .. currentVal .. " / " .. targetMaxCap .. "]")
+                
+                if currentVal >= targetMaxCap and not isTeleporting then
+                    forceTeleportToLobby("Auto Farm", "Goal reached! Teleporting to Lobby...")
+                end
             end
             
             if StatusParagraph then
