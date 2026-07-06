@@ -345,6 +345,7 @@ task.spawn(function()
                 table.insert(craftTargets, name)
             end
         end
+        end
     end
     table.sort(craftTargets)
     if #craftTargets == 0 then table.insert(craftTargets, "(None)") end
@@ -675,6 +676,15 @@ local AutoClaimDaily = Tabs.AutoFarm:AddToggle("AutoClaimDaily", { Title = "Auto
 local AutoClaimBundle = Tabs.AutoFarm:AddToggle("AutoClaimBundle", { Title = "Auto Claim Free Bundle", Default = false })
 local AutoQuest = Tabs.AutoFarm:AddToggle("AutoQuest", { Title = "Auto Quest", Default = false })
 local AutoToggle = Tabs.AutoFarm:AddToggle("MasterAutoRun", { Title = "ENABLE MASTER AUTO FARM", Default = false })
+local AutoReconnect = Tabs.AutoFarm:AddToggle("AutoReconnect", { Title = "ENABLE Auto Reconnect", Default = true })
+
+game:GetService("GuiService").ErrorMessageChanged:Connect(function(errMessage)
+    if errMessage and errMessage ~= "" and Options.AutoReconnect and Options.AutoReconnect.Value then
+        Fluent:Notify({ Title = "Connection Lost", Content = "Auto reconnecting in 5 seconds...", Duration = 5 })
+        task.wait(5)
+        game:GetService("TeleportService"):Teleport(game.PlaceId, game:GetService("Players").LocalPlayer)
+    end
+end)
 
 Tabs.Priority:AddParagraph({ Title = "Task Priority", Content = "Configure which auto farm tasks have priority over others. If a task has no work to do, it will fallback to the next priority. If all tasks are done, it defaults to Auto Farm Map." })
 local PriorityList = {"Auto Quest", "Auto Craft", "Auto Evo", "Auto Reroll", "None"}
