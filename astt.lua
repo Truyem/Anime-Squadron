@@ -13,6 +13,14 @@ local VirtualUser = game:GetService("VirtualUser")
 Players.LocalPlayer.Idled:Connect(function()
     VirtualUser:CaptureController()
     VirtualUser:ClickButton2(Vector2.new())
+    pcall(function() game:GetService("ReplicatedStorage").Remotes.Players.prevent_afk:FireServer() end)
+end)
+
+task.spawn(function()
+    while true do
+        task.wait(30)
+        pcall(function() game:GetService("ReplicatedStorage").Remotes.Players.prevent_afk:FireServer() end)
+    end
 end)
 
 local LobbyID = 71132543521245
