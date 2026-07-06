@@ -328,9 +328,53 @@ task.spawn(function()
     end
     table.sort(craftTargets)
     if #craftTargets == 0 then table.insert(craftTargets, "(None)") end
+    local currentCraft = Options.CraftTarget and Options.CraftTarget.Value
     DropdownCraftTarget:SetValues(craftTargets)
+    if currentCraft then DropdownCraftTarget:SetValue(currentCraft) end
 end)
 local InputCraftQty = Tabs.EvoCraft:AddInput("CraftQty", { Title = "Quantity to Craft", Default = "1", Numeric = true, Finished = false })
+
+_G.AnimeSquadron_CraftQueue = _G.AnimeSquadron_CraftQueue or {}
+_G.AnimeSquadron_UpdateCraftQueueUI = function() end
+
+local CraftQueuePara = Tabs.EvoCraft:AddParagraph({ Title = "Crafting Queue", Content = "Empty" })
+_G.AnimeSquadron_UpdateCraftQueueUI = function()
+    if #_G.AnimeSquadron_CraftQueue == 0 then
+        CraftQueuePara:SetDesc("Empty")
+    else
+        local lines = {}
+        for i, task in ipairs(_G.AnimeSquadron_CraftQueue) do
+            table.insert(lines, tostring(i) .. ". " .. task.name .. " x" .. task.qty)
+        end
+        CraftQueuePara:SetDesc(table.concat(lines, "\n"))
+    end
+end
+_G.AnimeSquadron_UpdateCraftQueueUI()
+
+Tabs.EvoCraft:AddButton({
+    Title = "Add to Queue",
+    Description = "Add currently selected item and quantity to queue.",
+    Callback = function()
+        local t = Options.CraftTarget.Value
+        local q = tonumber(Options.CraftQty.Value) or 1
+        if t and t ~= "(None)" and not string.find(t, "Loading") then
+            table.insert(_G.AnimeSquadron_CraftQueue, {name = t, qty = q})
+            _G.AnimeSquadron_UpdateCraftQueueUI()
+            Fluent:Notify({ Title = "Craft Queue", Content = "Added " .. t .. " x" .. q, Duration = 2 })
+        end
+    end
+})
+
+Tabs.EvoCraft:AddButton({
+    Title = "Clear Queue",
+    Description = "Remove all items from queue.",
+    Callback = function()
+        _G.AnimeSquadron_CraftQueue = {}
+        _G.AnimeSquadron_UpdateCraftQueueUI()
+        Fluent:Notify({ Title = "Craft Queue", Content = "Queue cleared.", Duration = 2 })
+    end
+})
+
 local ToggleAutoCraft = Tabs.EvoCraft:AddToggle("AutoCraft", { Title = "ENABLE Auto Craft", Default = false })
 
 -- === SHOPS & UPGRADES UI ===
@@ -375,7 +419,9 @@ task.spawn(function()
         table.sort(allMerchantItems)
     end)
     if #allMerchantItems == 0 then table.insert(allMerchantItems, "(Empty)") end
+    local currentMerchant = Options.MerchantItem and Options.MerchantItem.Value
     DropdownMerchantItem:SetValues(allMerchantItems)
+    if type(currentMerchant) == "table" then DropdownMerchantItem:SetValue(currentMerchant) end
 end)
 local ToggleAutoBuyMerchant = Tabs.ShopUpgrade:AddToggle("AutoBuyMerchant", { Title = "ENABLE Auto Buy [Merchant]", Default = false })
 
@@ -401,8 +447,10 @@ if isLobby then
                     for k,v in pairs(data) do
                         table.insert(items, tostring(k))
                     end
+                    local currentShopItem = dropdown.Value
                     if #items == 0 then table.insert(items, "(Empty)") end
                     dropdown:SetValues(items)
+                    if currentShopItem then dropdown:SetValue(currentShopItem) end
                 end
             end
             
@@ -653,6 +701,7 @@ if isLobby then
     local currentLoopId = _G.AnimeSquadronMainLoop
     task.spawn(function()
         local lastClaimTime = 0
+        local buyingDebounce = {}
         while true do
             task.wait(3)
             if _G.AnimeSquadronMainLoop ~= currentLoopId then return end
@@ -736,12 +785,36 @@ if isLobby then
                     if type(items) == "table" then
                         for itemName, isSelected in pairs(items) do
                             if isSelected and not string.find(itemName, "Waiting") and not string.find(itemName, "Empty") then
-                                pcall(function() game:GetService("ReplicatedStorage").Remotes.Shops.buy:InvokeServer(itemName, shopId, 1) end)
+                                local id = shopId .. "_" .. itemName
+                                if not buyingDebounce[id] then
+                                    buyingDebounce[id] = true
+                                    task.spawn(function()
+                                        for i=1, 100 do
+                                            local s, r = pcall(function() return game:GetService("ReplicatedStorage").Remotes.Shops.buy:InvokeServer(itemName, shopId, 1) end)
+                                            if not s or not r then break end
+                                            task.wait(0.2)
+                                        end
+                                        task.wait(5)
+                                        buyingDebounce[id] = nil
+                                    end)
+                                end
                             end
                         end
                     elseif type(items) == "string" then
                         if not string.find(items, "Waiting") and not string.find(items, "Empty") then
-                            pcall(function() game:GetService("ReplicatedStorage").Remotes.Shops.buy:InvokeServer(items, shopId, 1) end)
+                            local id = shopId .. "_" .. items
+                            if not buyingDebounce[id] then
+                                buyingDebounce[id] = true
+                                task.spawn(function()
+                                    for i=1, 100 do
+                                        local s, r = pcall(function() return game:GetService("ReplicatedStorage").Remotes.Shops.buy:InvokeServer(items, shopId, 1) end)
+                                        if not s or not r then break end
+                                        task.wait(0.2)
+                                    end
+                                    task.wait(5)
+                                    buyingDebounce[id] = nil
+                                end)
+                            end
                         end
                     end
                 end
@@ -757,62 +830,78 @@ if isLobby then
                 local doingCraft = Options.AutoCraft and Options.AutoCraft.Value
                 
                 if doingCraft then
-                    local targetName = Options.CraftTarget.Value
-                    local targetQty = tonumber(Options.CraftQty.Value) or 1
-                    
-                    local get = game:GetService("ReplicatedStorage").Remotes.Crafting:WaitForChild("get", 5)
-                    if get then
-                        local succ, recipes = pcall(function() return get:InvokeServer() end)
-                        if succ and type(recipes) == "table" and recipes[targetName] then
-                            local recipe = recipes[targetName]
-                            local missingMats = {}
-                            local totalMissingCount = 0
-                            
-                            local isMissingGold = false
-                            for matName, requiredPerCraftStr in pairs(recipe) do
-                                local requiredPerCraft = tonumber(requiredPerCraftStr) or 0
-                                local totalRequired = requiredPerCraft * targetQty
-                                local have = (util.data.items and util.data.items[matName] or 0) + (util.data.stats and util.data.stats[matName] or 0)
-                                if have < totalRequired then
-                                    totalMissingCount = totalMissingCount + 1
-                                    table.insert(missingMats, { name = matName, short = totalRequired - have, total = totalRequired })
-                                    if string.lower(matName) == "gold" then isMissingGold = true end
-                                end
-                            end
-                            
-                            if isMissingGold then
-                                ToggleAutoCraft:SetValue(false)
-                                Fluent:Notify({ Title = "Auto Craft", Content = "Missing Gold! Cannot farm Gold. Auto Craft disabled.", Duration = 5 })
-                                if Options.WebhookOnEvoCraft and Options.WebhookOnEvoCraft.Value then
-                                    if sendWebhookData then task.spawn(sendWebhookData, "CRAFT_FAIL", { name = targetName }) end
-                                end
-                            elseif totalMissingCount > 0 then
-                                local mat = missingMats[1]
-                                table.insert(activeQuestTexts, string.format("Craft Farming: %s (Need %d %s)", targetName, mat.short, mat.name))
-                                local cleanMatName = string.lower(tostring(mat.name))
-                                if _G.MATERIAL_DROPS and _G.MATERIAL_DROPS[cleanMatName] then
-                                    local dropInfo = _G.MATERIAL_DROPS[cleanMatName]
-                                    activeQuestMap = { mode = dropInfo.mode, world = dropInfo.world, act = dropInfo.acts[#dropInfo.acts], diff = "Hard", isMat = true, matName = mat.name, maxCap = mat.total }
-                                end
-                            else
-                                table.insert(activeQuestTexts, string.format("Craft Ready: %s x%d", targetName, targetQty))
-                                local craftedCount = 0
-                                for i = 1, targetQty do
-                                    local succ, res = pcall(function() return game:GetService("ReplicatedStorage").Remotes.Crafting.craft:InvokeServer(targetName, 1) end)
-                                    if succ and res then
-                                        craftedCount = craftedCount + 1
+                    local currentTask = _G.AnimeSquadron_CraftQueue[1]
+                    if currentTask then
+                        local targetName = currentTask.name
+                        local targetQty = currentTask.qty
+                        
+                        local get = game:GetService("ReplicatedStorage").Remotes.Crafting:WaitForChild("get", 5)
+                        if get then
+                            local succ, recipes = pcall(function() return get:InvokeServer() end)
+                            if succ and type(recipes) == "table" and recipes[targetName] then
+                                local recipe = recipes[targetName]
+                                local missingMats = {}
+                                local totalMissingCount = 0
+                                
+                                local isMissingGold = false
+                                for matName, requiredPerCraftStr in pairs(recipe) do
+                                    local requiredPerCraft = tonumber(requiredPerCraftStr) or 0
+                                    local totalRequired = requiredPerCraft * targetQty
+                                    local have = (util.data.items and util.data.items[matName] or 0) + (util.data.stats and util.data.stats[matName] or 0)
+                                    if have < totalRequired then
+                                        totalMissingCount = totalMissingCount + 1
+                                        table.insert(missingMats, { name = matName, short = totalRequired - have, total = totalRequired })
+                                        if string.lower(matName) == "gold" then isMissingGold = true end
                                     end
-                                    task.wait(0.5)
                                 end
                                 
-                                if craftedCount > 0 then
-                                    if Options.WebhookOnEvoCraft and Options.WebhookOnEvoCraft.Value then
-                                        if sendWebhookData then task.spawn(sendWebhookData, "CRAFT_SUCCESS", { name = targetName, qty = craftedCount }) end
-                                    end
+                                if isMissingGold then
                                     ToggleAutoCraft:SetValue(false)
+                                    Fluent:Notify({ Title = "Auto Craft", Content = "Missing Gold! Cannot farm Gold. Auto Craft disabled.", Duration = 5 })
+                                    if Options.WebhookOnEvoCraft and Options.WebhookOnEvoCraft.Value then
+                                        if sendWebhookData then task.spawn(sendWebhookData, "CRAFT_FAIL", { name = targetName }) end
+                                    end
+                                elseif totalMissingCount > 0 then
+                                    local mat = missingMats[1]
+                                    table.insert(activeQuestTexts, string.format("Craft Farming: %s (Need %d %s)", targetName, mat.short, mat.name))
+                                    local cleanMatName = string.lower(tostring(mat.name))
+                                    if _G.MATERIAL_DROPS and _G.MATERIAL_DROPS[cleanMatName] then
+                                        local dropInfo = _G.MATERIAL_DROPS[cleanMatName]
+                                        activeQuestMap = { mode = dropInfo.mode, world = dropInfo.world, act = dropInfo.acts[#dropInfo.acts], diff = "Hard", isMat = true, matName = mat.name, maxCap = mat.total }
+                                    end
+                                else
+                                    table.insert(activeQuestTexts, string.format("Craft Ready: %s x%d", targetName, targetQty))
+                                    local craftedCount = 0
+                                    for i = 1, targetQty do
+                                        local succ, res = pcall(function() return game:GetService("ReplicatedStorage").Remotes.Crafting.craft:InvokeServer(targetName, 1) end)
+                                        if succ and res then
+                                            craftedCount = craftedCount + 1
+                                        end
+                                        task.wait(0.5)
+                                    end
+                                    
+                                    if craftedCount > 0 then
+                                        if Options.WebhookOnEvoCraft and Options.WebhookOnEvoCraft.Value then
+                                            if sendWebhookData then task.spawn(sendWebhookData, "CRAFT_SUCCESS", { name = targetName, qty = craftedCount }) end
+                                        end
+                                        
+                                        if _G.AnimeSquadron_CraftQueue[1] then
+                                            _G.AnimeSquadron_CraftQueue[1].qty = _G.AnimeSquadron_CraftQueue[1].qty - craftedCount
+                                            if _G.AnimeSquadron_CraftQueue[1].qty <= 0 then
+                                                table.remove(_G.AnimeSquadron_CraftQueue, 1)
+                                            end
+                                        end
+                                        
+                                        pcall(function() _G.AnimeSquadron_UpdateCraftQueueUI() end)
+                                        if #_G.AnimeSquadron_CraftQueue == 0 then
+                                            ToggleAutoCraft:SetValue(false)
+                                        end
+                                    end
                                 end
                             end
                         end
+                    else
+                        ToggleAutoCraft:SetValue(false)
                     end
                 end
                 
