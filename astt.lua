@@ -1,9 +1,27 @@
 if not game:IsLoaded() then
     game.Loaded:Wait()
 end
-local Fluent = loadstring(game:HttpGet("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua"))()
-local SaveManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua"))()
-local InterfaceManager = loadstring(game:HttpGet("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua"))()
+local function loadLib(url)
+    local lib
+    for i = 1, 5 do
+        local succ, res = pcall(function() return loadstring(game:HttpGet(url))() end)
+        if succ and res then
+            lib = res
+            break
+        end
+        task.wait(1)
+    end
+    return lib
+end
+
+local Fluent = loadLib("https://github.com/dawid-scripts/Fluent/releases/latest/download/main.lua")
+local SaveManager = loadLib("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/SaveManager.lua")
+local InterfaceManager = loadLib("https://raw.githubusercontent.com/dawid-scripts/Fluent/master/Addons/InterfaceManager.lua")
+
+if not Fluent then
+    warn("Failed to load Fluent UI library! Please check your internet connection or executor.")
+    return
+end
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
@@ -757,6 +775,23 @@ if isLobby then
             local activeQuestMap = nil
             local activeQuestTexts = {}
             
+            local function getInventoryAmount(matName)
+                local have = 0
+                if util and util.data then
+                    if util.data.items then
+                        for k, v in pairs(util.data.items) do
+                            if string.lower(k) == string.lower(matName) then have = have + v end
+                        end
+                    end
+                    if util.data.stats then
+                        for k, v in pairs(util.data.stats) do
+                            if string.lower(k) == string.lower(matName) then have = have + v end
+                        end
+                    end
+                end
+                return have
+            end
+            
             local function runAutoQuest()
                 if not (Options.AutoQuest and Options.AutoQuest.Value and util and util.data and util.data.quests) then return false end
                 local anyToClaim = false
@@ -858,6 +893,7 @@ if isLobby then
             
             local function runAutoCraft()
                 if not (Options.AutoCraft and Options.AutoCraft.Value) then return false end
+                if not (util and util.data and util.data.stats and util.data.stats.Gold) then return false end
                 local currentTask = _G.AnimeSquadron_CraftQueue[1]
                 if not currentTask then
                     ToggleAutoCraft:SetValue(false)
@@ -880,7 +916,7 @@ if isLobby then
                 for matName, requiredPerCraftStr in pairs(recipe) do
                     local requiredPerCraft = tonumber(requiredPerCraftStr) or 0
                     local totalRequired = requiredPerCraft * targetQty
-                    local have = (util.data.items and util.data.items[matName] or 0) + (util.data.stats and util.data.stats[matName] or 0)
+                    local have = getInventoryAmount(matName)
                     if have < totalRequired then
                         totalMissingCount = totalMissingCount + 1
                         table.insert(missingMats, { name = matName, short = totalRequired - have, total = totalRequired })
@@ -932,6 +968,7 @@ if isLobby then
             
             local function runAutoEvo()
                 if not (Options.AutoEvo and Options.AutoEvo.Value) then return false end
+                if not (util and util.data and util.data.stats and util.data.stats.Gold) then return false end
                 local targetName = Options.EvoTarget and Options.EvoTarget.Value
                 if not targetName or targetName == "(None)" or string.find(targetName, "Waiting") then return false end
                 local targetQty = 1
@@ -949,7 +986,7 @@ if isLobby then
                 
                 for matName, requiredPerEvo in pairs(evoData.cost) do
                     local totalRequired = requiredPerEvo * targetQty
-                    local have = (util.data.items and util.data.items[matName] or 0) + (util.data.stats and util.data.stats[matName] or 0)
+                    local have = getInventoryAmount(matName)
                     if have < totalRequired then
                         totalMissingCount = totalMissingCount + 1
                         table.insert(missingMats, { name = matName, short = totalRequired - have, total = totalRequired })
