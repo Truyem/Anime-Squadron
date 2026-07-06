@@ -1387,8 +1387,30 @@ end
         statusText = "Craft Failed: " .. (diffs.name or "Gear") .. " (Missing Gold)"
     end
     
+    local req = nil
+    if type(http_request) == "function" then req = http_request
+    elseif type(request) == "function" then req = request
+    elseif type(syn) == "table" and type(syn.request) == "function" then req = syn.request
+    elseif type(fluxus) == "table" and type(fluxus.request) == "function" then req = fluxus.request end
+
+    if not _G.AnimeSquadron_GameIconUrl and req then
+        pcall(function()
+            local HttpService = game:GetService("HttpService")
+            local res = req({
+                Url = "https://thumbnails.roblox.com/v1/places/gameicons?placeIds=71132543521245&returnPolicy=PlaceHolder&size=256x256&format=Png&isCircular=false",
+                Method = "GET"
+            })
+            if res and res.StatusCode == 200 then
+                local data = HttpService:JSONDecode(res.Body)
+                if data and data.data and data.data[1] and data.data[1].imageUrl then
+                    _G.AnimeSquadron_GameIconUrl = data.data[1].imageUrl
+                end
+            end
+        end)
+    end
+    
     local playerName = game.Players.LocalPlayer.Name
-    local gameIconUrl = "https://tr.rbxcdn.com/180DAY-d29acf5020ecef8a89736cb5f23d934c/512/512/Image/Png/noFilter"
+    local gameIconUrl = _G.AnimeSquadron_GameIconUrl or "https://tr.rbxcdn.com/180DAY-be958a6a9a4cd62dd39ea378da75a165/256/256/Image/Webp/noFilter"
     
     local embed = {
         title = "Anime Squadron - Auto Farm Update",
@@ -1414,14 +1436,9 @@ end
         embeds = { embed }
     }
     
-    local req = nil
-    if type(http_request) == "function" then req = http_request
-    elseif type(request) == "function" then req = request
-    elseif type(syn) == "table" and type(syn.request) == "function" then req = syn.request
-    elseif type(fluxus) == "table" and type(fluxus.request) == "function" then req = fluxus.request end
-    
     if req then
         local success, res = pcall(function()
+            local HttpService = game:GetService("HttpService")
             return req({
                 Url = WebhookURL.Value,
                 Method = "POST",
