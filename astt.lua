@@ -56,19 +56,17 @@ if isLobby then
         for worldId, world in pairs(Worlds) do
             if type(worldId) == "number" and world.Rewards then
                 for mode, diffs in pairs(world.Rewards) do
-                    if mode == "Challenge" or mode == "Raid" then
-                        local diffsToCheck = diffs["Normal"] or diffs["Hard"]
-                        if diffsToCheck then
-                            for act, drops in pairs(diffsToCheck) do
-                                for dropName, dropData in pairs(drops) do
-                                    if dropName == "Trait Shards" and dropData.cap then
-                                        table.insert(traitMaps, {
-                                            world = world.name,
-                                            mode = mode,
-                                            act = act,
-                                            cap = dropData.cap
-                                        })
-                                    end
+                    local diffsToCheck = diffs["Normal"] or diffs["Hard"]
+                    if diffsToCheck then
+                        for act, drops in pairs(diffsToCheck) do
+                            for dropName, dropData in pairs(drops) do
+                                if dropName == "Trait Shards" and dropData.cap then
+                                    table.insert(traitMaps, {
+                                        world = world.name,
+                                        mode = mode,
+                                        act = act,
+                                        cap = dropData.cap
+                                    })
                                 end
                             end
                         end
@@ -164,6 +162,7 @@ local Window = Fluent:CreateWindow({
 local Tabs = {
     AutoFarm = Window:AddTab({ Title = "Auto Farm", Icon = "play" }),
     EvoCraft = Window:AddTab({ Title = "Evo & Craft", Icon = "hammer" }),
+    AutoReroll = Window:AddTab({ Title = "Auto Reroll", Icon = "dices" }),
     ShopUpgrade = Window:AddTab({ Title = "Shop & Upgrades", Icon = "shopping-cart" }),
     Claims = Window:AddTab({ Title = "Claims & Misc", Icon = "gift" }),
     Sniper = Window:AddTab({ Title = "Challenge Sniper", Icon = "target" }),
@@ -336,8 +335,10 @@ local DropdownCraftTarget = Tabs.EvoCraft:AddDropdown("CraftTarget", { Title = "
 
 task.spawn(function()
     local craftTargets = {}
-    local get = game:GetService("ReplicatedStorage").Remotes.Crafting:WaitForChild("get", 5)
-    if get then
+    local craftingFolder = game:GetService("ReplicatedStorage").Remotes:FindFirstChild("Crafting")
+    if craftingFolder then
+        local get = craftingFolder:WaitForChild("get", 5)
+        if get then
         local succ, recipes = pcall(function() return get:InvokeServer() end)
         if succ and type(recipes) == "table" then
             for name, _ in pairs(recipes) do
@@ -418,6 +419,45 @@ Tabs.EvoCraft:AddButton({
 
 local ToggleAutoCraft = Tabs.EvoCraft:AddToggle("AutoCraft", { Title = "ENABLE Auto Craft", Default = false })
 
+-- === AUTO REROLL UI ===
+Tabs.AutoReroll:AddParagraph({ Title = "Auto Stat Reroll", Content = "Select a unit. It will automatically lock the specified stats and reroll when Potential reaches 100%." })
+
+local DropdownRerollUnit = Tabs.AutoReroll:AddDropdown("RerollUnit", { Title = "Select Unit", Values = {"(Loading...)"}, Multi = false, Default = 1 })
+
+task.spawn(function()
+    local util
+    while task.wait(3) do
+        pcall(function() util = require(game:GetService("Players").LocalPlayer.PlayerScripts.Client.Utility) end)
+        if util and util.data and util.data.characters then
+            local unitList = {}
+            for k, v in pairs(util.data.characters) do
+                if v.equipped == true then
+                    table.insert(unitList, v.name .. " [" .. tostring(k) .. "]")
+                end
+            end
+            if #unitList == 0 then table.insert(unitList, "(No Equipped Units)") end
+            
+            local currentVal = Options.RerollUnit and Options.RerollUnit.Value
+            local found = false
+            if currentVal then
+                for _, u in ipairs(unitList) do
+                    if u == currentVal then found = true break end
+                end
+            end
+            
+            DropdownRerollUnit:SetValues(unitList)
+            
+            if currentVal and not found then
+                DropdownRerollUnit:SetValue(unitList[1])
+            end
+        end
+    end
+end)
+
+local DropdownLockedStats = Tabs.AutoReroll:AddDropdown("LockedStats", { Title = "Stats to Lock", Values = {"SSS", "SS", "S+", "S", "A+", "A", "B+", "B", "C+", "C", "C-"}, Multi = true, Default = {["SSS"] = true} })
+
+local ToggleAutoReroll = Tabs.AutoReroll:AddToggle("AutoReroll", { Title = "ENABLE Auto Reroll (100% Potential)", Default = false })
+
 -- === SHOPS & UPGRADES UI ===
 Tabs.ShopUpgrade:AddParagraph({ Title = "Dynamic Shops", Content = "Merchant lists all possible items. Raid/Event refresh automatically." })
 
@@ -466,10 +506,10 @@ task.spawn(function()
 end)
 local ToggleAutoBuyMerchant = Tabs.ShopUpgrade:AddToggle("AutoBuyMerchant", { Title = "ENABLE Auto Buy [Merchant]", Default = false })
 
-local DropdownRaidShopItem = Tabs.ShopUpgrade:AddDropdown("RaidShopItem", { Title = "[Raid] Target Item", Values = {"(Waiting...)"}, Multi = false, Default = 1 })
+local DropdownRaidShopItem = Tabs.ShopUpgrade:AddDropdown("RaidShopItems", { Title = "[Raid] Target Item", Values = {"(Waiting...)"}, Multi = true, Default = {} })
 local ToggleAutoBuyRaid = Tabs.ShopUpgrade:AddToggle("AutoBuyRaid", { Title = "ENABLE Auto Buy [Raid Shop]", Default = false })
 
-local DropdownEventShopItem = Tabs.ShopUpgrade:AddDropdown("EventShopItem", { Title = "[Event] Target Item", Values = {"(Waiting...)"}, Multi = false, Default = 1 })
+local DropdownEventShopItem = Tabs.ShopUpgrade:AddDropdown("EventShopItems", { Title = "[Event] Target Item", Values = {"(Waiting...)"}, Multi = true, Default = {} })
 local ToggleAutoBuyEvent = Tabs.ShopUpgrade:AddToggle("AutoBuyEvent", { Title = "ENABLE Auto Buy [Event Shop]", Default = false })
 
 if isLobby then
@@ -587,7 +627,13 @@ local function updateStatsUI()
         local t_base = SessionStats.StartTrait == -1 and 0 or SessionStats.StartTrait
         local p_base = SessionStats.StartPerfect == -1 and 0 or SessionStats.StartPerfect
         local r_base = SessionStats.StartReroll == -1 and 0 or SessionStats.StartReroll
-        StatsParagraph:SetDesc(string.format("Matches Played: %d\nTrait Shards: %d + %d\nPerfect Cubes: %d + %d\nReroll Cubes: %d + %d", SessionStats.Matches, t_base, SessionStats.TraitShards, p_base, SessionStats.PerfectCubes, r_base, SessionStats.RerollCubes))
+        
+        local t_current = t_base + SessionStats.TraitShards
+        local p_current = p_base + SessionStats.PerfectCubes
+        local r_current = r_base + SessionStats.RerollCubes
+        
+        StatsParagraph:SetDesc(string.format("Matches Played: %d\nTrait Shards: +%d (Current: %d)\nPerfect Cubes: +%d (Current: %d)\nReroll Cubes: +%d (Current: %d)", 
+            SessionStats.Matches, SessionStats.TraitShards, t_current, SessionStats.PerfectCubes, p_current, SessionStats.RerollCubes, r_current))
     end
 end
 
@@ -631,10 +677,11 @@ local AutoQuest = Tabs.AutoFarm:AddToggle("AutoQuest", { Title = "Auto Quest", D
 local AutoToggle = Tabs.AutoFarm:AddToggle("MasterAutoRun", { Title = "ENABLE MASTER AUTO FARM", Default = false })
 
 Tabs.Priority:AddParagraph({ Title = "Task Priority", Content = "Configure which auto farm tasks have priority over others. If a task has no work to do, it will fallback to the next priority. If all tasks are done, it defaults to Auto Farm Map." })
-local PriorityList = {"Auto Quest", "Auto Craft", "Auto Evo", "None"}
+local PriorityList = {"Auto Quest", "Auto Craft", "Auto Evo", "Auto Reroll", "None"}
 Tabs.Priority:AddDropdown("Priority1", { Title = "Priority 1 (Highest)", Values = PriorityList, Multi = false, Default = "Auto Quest" })
 Tabs.Priority:AddDropdown("Priority2", { Title = "Priority 2", Values = PriorityList, Multi = false, Default = "Auto Craft" })
 Tabs.Priority:AddDropdown("Priority3", { Title = "Priority 3", Values = PriorityList, Multi = false, Default = "Auto Evo" })
+Tabs.Priority:AddDropdown("Priority4", { Title = "Priority 4", Values = PriorityList, Multi = false, Default = "Auto Reroll" })
 
 Tabs.Webhook:AddParagraph({ Title = "Discord Webhook", Content = "Automatic status reporter" })
 local WebhookURL = Tabs.Webhook:AddInput("WebhookURL", { Title = "Webhook URL", Default = "", Numeric = false, Finished = false, Placeholder = "https://discord.com/api/webhooks/..." })
@@ -888,8 +935,8 @@ if isLobby then
             end
             
             tryBuyShop(Options.AutoBuyMerchant, Options.MerchantItem, "merchant")
-            tryBuyShop(Options.AutoBuyRaid, Options.RaidShopItem, "gt_city_raid")
-            tryBuyShop(Options.AutoBuyEvent, Options.EventShopItem, "baras_event")
+            tryBuyShop(Options.AutoBuyRaid, Options.RaidShopItems, "gt_city_raid")
+            tryBuyShop(Options.AutoBuyEvent, Options.EventShopItems, "baras_event")
             
             local function runAutoCraft()
                 if not (Options.AutoCraft and Options.AutoCraft.Value) then return false end
@@ -1031,11 +1078,63 @@ if isLobby then
                     return true
                 end
             end
+            local function runAutoReroll()
+                if not (Options.AutoReroll and Options.AutoReroll.Value) then return false end
+                if not util or not util.data or not util.data.characters then return false end
+                
+                local targetString = Options.RerollUnit and Options.RerollUnit.Value
+                if not targetString or targetString == "(Loading...)" or targetString == "(No Equipped Units)" then return false end
+                
+                local targetId = string.match(targetString, "%[(.-)%]")
+                if not targetId then return false end
+                
+                local unit = util.data.characters[targetId]
+                if not unit then return false end
+                
+                if unit.potential and tonumber(unit.potential) >= 1000 then
+                    local locksToApply = {}
+                    local lockToggles = {}
+                    if Options.LockedStats and type(Options.LockedStats.Value) == "table" then
+                        for k, v in pairs(Options.LockedStats.Value) do
+                            if v then lockToggles[k] = true end
+                        end
+                    end
+                    
+                    local hasUnlock = false
+                    if unit.ranks then
+                        for statName, rank in pairs(unit.ranks) do
+                            if lockToggles[rank] then
+                                locksToApply[statName] = true
+                            else
+                                hasUnlock = true
+                            end
+                        end
+                    else
+                        hasUnlock = true
+                    end
+                    
+                    if hasUnlock then
+                        local rerollRemote = game:GetService("ReplicatedStorage").Remotes:FindFirstChild("Stat_Reroll")
+                        if rerollRemote and rerollRemote:FindFirstChild("reroll") then
+                            pcall(function()
+                                rerollRemote.reroll:InvokeServer(targetId, locksToApply)
+                            end)
+                            table.insert(activeQuestTexts, "Rerolling Stats for " .. unit.name .. "...")
+                            return true
+                        end
+                    else
+                        ToggleAutoReroll:SetValue(false)
+                        Fluent:Notify({ Title = "Auto Reroll", Content = "All stats are locked or matched! Auto Reroll disabled.", Duration = 3 })
+                    end
+                end
+                return false
+            end
             
             local priorities = {
                 Options.Priority1 and Options.Priority1.Value or "Auto Quest",
                 Options.Priority2 and Options.Priority2.Value or "Auto Craft",
-                Options.Priority3 and Options.Priority3.Value or "Auto Evo"
+                Options.Priority3 and Options.Priority3.Value or "Auto Evo",
+                Options.Priority4 and Options.Priority4.Value or "Auto Reroll"
             }
             
             local handled = false
@@ -1044,6 +1143,7 @@ if isLobby then
                     if p == "Auto Quest" then handled = runAutoQuest()
                     elseif p == "Auto Craft" then handled = runAutoCraft()
                     elseif p == "Auto Evo" then handled = runAutoEvo()
+                    elseif p == "Auto Reroll" then handled = runAutoReroll()
                     end
                 end
             end
@@ -1458,8 +1558,13 @@ else
                         end
                     end
                     
-                    if not isTeleporting and Options.AutoLeaveToggle.Value and targetCapStr and targetMaxCap and util and util.data and util.data.caps then
-                        local currentVal = util.data.caps[targetCapStr] or 0
+                    if not isTeleporting and Options.AutoLeaveToggle.Value and targetCapStr and targetMaxCap and util and util.data then
+                        local currentVal = 0
+                        if targetCapType == "Item" then
+                            currentVal = (util.data.items and util.data.items[targetCapStr] or 0) + (util.data.stats and util.data.stats[targetCapStr] or 0)
+                        else
+                            currentVal = util.data.caps and util.data.caps[targetCapStr] or 0
+                        end
                         print("[AutoFarm] Current Limit post-match: " .. currentVal .. " / " .. targetMaxCap)
                         
                         if currentVal >= targetMaxCap then
@@ -1513,6 +1618,11 @@ end
         if diffs.units and type(diffs.units) == "table" and #diffs.units > 0 then
             for _, unitName in ipairs(diffs.units) do
                 table.insert(droppedItems, "Unit Drop: " .. tostring(unitName))
+            end
+        end
+        if diffs.items and type(diffs.items) == "table" then
+            for itemName, qty in pairs(diffs.items) do
+                table.insert(droppedItems, itemName .. " +" .. tostring(qty))
             end
         end
     end
@@ -1661,6 +1771,7 @@ task.spawn(function()
     local util
     local lastTrait, lastPerfect, lastReroll = -1, -1, -1
     local knownChars = nil
+    local lastItems = nil
     while true do
         if _G.AnimeSquadronStatsLoop ~= currentStatsLoop then return end
         task.wait(5)
@@ -1670,6 +1781,13 @@ task.spawn(function()
             local currentPerfect = util.data.stats["Perfect Cubes"] or 0
             local currentReroll = util.data.stats["Reroll Cubes"] or 0
             
+            local currentItems = {}
+            if util.data.items then
+                for k, v in pairs(util.data.items) do
+                    currentItems[k] = v
+                end
+            end
+            
             local currentChars = {}
             if util.data.characters then
                 for k, v in pairs(util.data.characters) do
@@ -1677,7 +1795,7 @@ task.spawn(function()
                 end
             end
             
-            if lastTrait ~= -1 and lastPerfect ~= -1 and lastReroll ~= -1 and knownChars ~= nil then
+            if lastTrait ~= -1 and lastPerfect ~= -1 and lastReroll ~= -1 and knownChars ~= nil and lastItems ~= nil then
                 if SessionStats.StartTrait == -1 then
                     SessionStats.StartTrait = currentTrait
                     SessionStats.StartPerfect = currentPerfect
@@ -1697,7 +1815,17 @@ task.spawn(function()
                     end
                 end
                 
-                if diffTrait > 0 or diffPerfect > 0 or diffReroll > 0 or #droppedUnits > 0 then
+                local diffItems = {}
+                local hasItemDiff = false
+                for k, v in pairs(currentItems) do
+                    local old = lastItems[k] or 0
+                    if v > old then
+                        diffItems[k] = v - old
+                        hasItemDiff = true
+                    end
+                end
+                
+                if diffTrait > 0 or diffPerfect > 0 or diffReroll > 0 or #droppedUnits > 0 or hasItemDiff then
                     if diffTrait > 0 then SessionStats.TraitShards = SessionStats.TraitShards + diffTrait end
                     if diffPerfect > 0 then SessionStats.PerfectCubes = SessionStats.PerfectCubes + diffPerfect end
                     if diffReroll > 0 then SessionStats.RerollCubes = SessionStats.RerollCubes + diffReroll end
@@ -1710,7 +1838,8 @@ task.spawn(function()
                             trait = diffTrait,
                             perfect = diffPerfect,
                             reroll = diffReroll,
-                            units = droppedUnits
+                            units = droppedUnits,
+                            items = diffItems
                         })
                         task.wait(10)
                     end
@@ -1720,6 +1849,7 @@ task.spawn(function()
             lastPerfect = currentPerfect
             lastReroll = currentReroll
             knownChars = currentChars
+            lastItems = currentItems
         end
     end
 end)
