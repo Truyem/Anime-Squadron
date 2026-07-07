@@ -855,44 +855,80 @@ local DropdownLockedStats = Tabs.AutoReroll:AddDropdown("LockedStats", { Title =
 local ToggleAutoReroll = Tabs.AutoReroll:AddToggle("AutoReroll", { Title = L.RerollTog, Description = L.RerollTogD, Default = false })
 Tabs.ShopUpgrade:AddParagraph({ Title = L.ShopDyn, Content = L.ShopDynD })
 
+local function loadShopItems(shopName)
+    local items = {}
+    pcall(function()
+        if isfile and readfile and isfile("as_free/ShopItems.json") then
+            local data = game:GetService("HttpService"):JSONDecode(readfile("as_free/ShopItems.json"))
+            if data and type(data) == "table" and data[shopName] then
+                items = data[shopName]
+            end
+        end
+    end)
+    return items
+end
+
+local function saveShopItems(shopName, itemsList)
+    pcall(function()
+        local data = {}
+        if isfile and readfile and isfile("as_free/ShopItems.json") then
+            data = game:GetService("HttpService"):JSONDecode(readfile("as_free/ShopItems.json")) or {}
+        end
+        data[shopName] = itemsList
+        if writefile then
+            writefile("as_free/ShopItems.json", game:GetService("HttpService"):JSONEncode(data))
+        end
+    end)
+end
+
 local DropdownMerchantItem = Tabs.ShopUpgrade:AddDropdown("MerchantItem", { Title = L.MerchItem, Description = L.MerchItemD, Values = {"(Loading Items...)"}, Multi = true, Default = {} })
 
 task.spawn(function()
-    local allMerchantItems = {}
-    pcall(function()
-        local rep = game:GetService("ReplicatedStorage")
-        local get = rep.Remotes.Shops:WaitForChild("get", 5)
-        
-        local blacklist = {}
-        if get then
-            local succ1, raid = pcall(function() return get:InvokeServer("gt_city_raid") end)
-            if succ1 and type(raid) == "table" then for k,_ in pairs(raid) do blacklist[k] = true end end
+    local allMerchantItems = loadShopItems("Merchant")
+    if type(allMerchantItems) ~= "table" then allMerchantItems = {} end
+    
+    if isLobby then
+        pcall(function()
+            local rep = game:GetService("ReplicatedStorage")
+            local get = rep.Remotes.Shops:WaitForChild("get", 30)
             
-            local succ2, event = pcall(function() return get:InvokeServer("baras_event") end)
-            if succ2 and type(event) == "table" then for k,_ in pairs(event) do blacklist[k] = true end end
-        end
-        
-        local whitelist = {
-            ["Gold"] = true, ["Gems"] = true, ["Trait Shards"] = true, ["Reroll Cubes"] = true, ["Perfect Cubes"] = true
-        }
-        
-        for _, folderName in ipairs({"Items", "Materials"}) do
-            local folder = rep:FindFirstChild(folderName)
-            if folder then
-                for _, v in ipairs(folder:GetChildren()) do
-                    local name = v.Name
-                    if whitelist[name] then
-                        if not table.find(allMerchantItems, name) then table.insert(allMerchantItems, name) end
-                    else
-                        if not blacklist[name] and not string.find(name, "XP") and not string.find(name, "Coin") then
-                            if not table.find(allMerchantItems, name) then table.insert(allMerchantItems, name) end
+            local blacklist = {}
+            if get then
+                local succ1, raid = pcall(function() return get:InvokeServer("gt_city_raid") end)
+                if succ1 and type(raid) == "table" then for k,_ in pairs(raid) do blacklist[k] = true end end
+                
+                local succ2, event = pcall(function() return get:InvokeServer("baras_event") end)
+                if succ2 and type(event) == "table" then for k,_ in pairs(event) do blacklist[k] = true end end
+            end
+            
+            local whitelist = {
+                ["Trait Shards"] = true, ["Reroll Cubes"] = true, ["Perfect Cubes"] = true
+            }
+            
+            local tempItems = {}
+            for _, folderName in ipairs({"Items", "Materials"}) do
+                local folder = rep:WaitForChild(folderName, 30)
+                if folder then
+                    for _, v in ipairs(folder:GetChildren()) do
+                        local name = v.Name
+                        if whitelist[name] then
+                            if not table.find(tempItems, name) then table.insert(tempItems, name) end
+                        else
+                            if not blacklist[name] and not string.find(name, "XP") and not string.find(name, "Coin") then
+                                if not table.find(tempItems, name) then table.insert(tempItems, name) end
+                            end
                         end
                     end
                 end
             end
-        end
-        table.sort(allMerchantItems)
-    end)
+            
+            if #tempItems > 0 then
+                table.sort(tempItems)
+                allMerchantItems = tempItems
+                saveShopItems("Merchant", allMerchantItems)
+            end
+        end)
+    end
     if #allMerchantItems == 0 then table.insert(allMerchantItems, "(Empty)") end
     local currentMerchant = Options.MerchantItem and Options.MerchantItem.Value
     DropdownMerchantItem:SetValues(allMerchantItems)
@@ -906,16 +942,31 @@ local ToggleAutoBuyRaid = Tabs.ShopUpgrade:AddToggle("AutoBuyRaid", { Title = L.
 local DropdownEventShopItem = Tabs.ShopUpgrade:AddDropdown("EventShopItems", { Title = L.EventItem, Description = L.EventItemD, Values = {"(Waiting...)"}, Multi = true, Default = {} })
 local ToggleAutoBuyEvent = Tabs.ShopUpgrade:AddToggle("AutoBuyEvent", { Title = L.EventTog, Description = L.EventTogD, Default = false })
 
+task.spawn(function()
+    pcall(function()
+        local raidItems = loadShopItems("Raid")
+        if #raidItems > 0 then DropdownRaidShopItem:SetValues(raidItems) end
+        local rCurrent = Options.RaidShopItems and Options.RaidShopItems.Value
+        if type(rCurrent) == "table" then DropdownRaidShopItem:SetValue(rCurrent) end
+        
+        local eventItems = loadShopItems("Event")
+        if #eventItems > 0 then DropdownEventShopItem:SetValues(eventItems) end
+        local eCurrent = Options.EventShopItems and Options.EventShopItems.Value
+        if type(eCurrent) == "table" then DropdownEventShopItem:SetValue(eCurrent) end
+    end)
+end)
+
 if isLobby then
     _G.AnimeSquadronShopLoop = (_G.AnimeSquadronShopLoop or 0) + 1
     local currentLoopId = _G.AnimeSquadronShopLoop
     task.spawn(function()
-        local get = game:GetService("ReplicatedStorage").Remotes.Shops:WaitForChild("get", 5)
+        local get = game:GetService("ReplicatedStorage").Remotes.Shops:WaitForChild("get", 30)
         if not get then return end
+        local HttpService = game:GetService("HttpService")
         
         while task.wait(10) do
             if _G.AnimeSquadronShopLoop ~= currentLoopId then return end
-            local function updateShop(shopId, dropdown)
+            local function updateShop(shopId, dropdown, saveKey)
                 local succ, data = pcall(function() return get:InvokeServer(shopId) end)
                 if succ and type(data) == "table" then
                     local items = {}
@@ -923,14 +974,16 @@ if isLobby then
                         table.insert(items, tostring(k))
                     end
                     local currentShopItem = dropdown.Value
-                    if #items == 0 then table.insert(items, "(Empty)") end
+                    if #items == 0 then table.insert(items, "(Empty)") else
+                        saveShopItems(saveKey, items)
+                    end
                     dropdown:SetValues(items)
                     if currentShopItem then dropdown:SetValue(currentShopItem) end
                 end
             end
             
-            updateShop("gt_city_raid", DropdownRaidShopItem)
-            updateShop("baras_event", DropdownEventShopItem)
+            updateShop("gt_city_raid", DropdownRaidShopItem, "Raid")
+            updateShop("baras_event", DropdownEventShopItem, "Event")
         end
     end)
 end
