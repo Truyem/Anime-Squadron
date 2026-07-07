@@ -28,6 +28,22 @@ local Players = game:GetService("Players")
 local HttpService = game:GetService("HttpService")
 local VirtualUser = game:GetService("VirtualUser")
 
+local localPlayerId = tostring(Players.LocalPlayer.UserId)
+_G.AnimeSquadron_BasePath = "as_free/as_" .. localPlayerId
+local basePath = _G.AnimeSquadron_BasePath
+
+local function ensureFolder(path)
+    if not isfolder then return end
+    local current = ""
+    for part in string.gmatch(path, "[^/]+") do
+        current = current == "" and part or current .. "/" .. part
+        if not isfolder(current) then
+            pcall(function() makefolder(current) end)
+        end
+    end
+end
+pcall(function() ensureFolder(basePath) end)
+
 Players.LocalPlayer.Idled:Connect(function()
     VirtualUser:CaptureController()
     VirtualUser:ClickButton2(Vector2.new())
@@ -81,11 +97,9 @@ if isLobby then
         
         if isfile and writefile then
             pcall(function()
-                writefile("AnimeSquadron_MapsCache.json", HttpService:JSONEncode(traitMaps))
+                writefile(basePath .. "/MapsCache.json", HttpService:JSONEncode(traitMaps))
             end)
         end
-        
-        -- Dynamic Scraper for MATERIAL_DROPS
         _G.MATERIAL_DROPS = {}
         for worldId, world in pairs(Worlds) do
             if type(worldId) == "number" and world.name and world.Rewards then
@@ -118,15 +132,15 @@ if isLobby then
             end
         end
         if isfile and writefile then
-            pcall(function() writefile("AnimeSquadron_MatCache.json", HttpService:JSONEncode(_G.MATERIAL_DROPS)) end)
+            pcall(function() writefile(basePath .. "/MatCache.json", HttpService:JSONEncode(_G.MATERIAL_DROPS)) end)
         end
     else
         local function loadCache()
-            if isfile and readfile and isfile("AnimeSquadron_MatCache.json") then
-                pcall(function() _G.MATERIAL_DROPS = HttpService:JSONDecode(readfile("AnimeSquadron_MatCache.json")) end)
+            if isfile and readfile and isfile(basePath .. "/MatCache.json") then
+                pcall(function() _G.MATERIAL_DROPS = HttpService:JSONDecode(readfile(basePath .. "/MatCache.json")) end)
             end
-            if isfile and readfile and isfile("AnimeSquadron_MapsCache.json") then
-                local succ2, data2 = pcall(function() return HttpService:JSONDecode(readfile("AnimeSquadron_MapsCache.json")) end)
+            if isfile and readfile and isfile(basePath .. "/MapsCache.json") then
+                local succ2, data2 = pcall(function() return HttpService:JSONDecode(readfile(basePath .. "/MapsCache.json")) end)
                 if succ2 and type(data2) == "table" then
                     traitMaps = data2
                 end
@@ -136,11 +150,11 @@ if isLobby then
     end
 else
     local function loadCache()
-        if isfile and readfile and isfile("AnimeSquadron_MatCache.json") then
-            pcall(function() _G.MATERIAL_DROPS = HttpService:JSONDecode(readfile("AnimeSquadron_MatCache.json")) end)
+        if isfile and readfile and isfile(basePath .. "/MatCache.json") then
+            pcall(function() _G.MATERIAL_DROPS = HttpService:JSONDecode(readfile(basePath .. "/MatCache.json")) end)
         end
-        if isfile and readfile and isfile("AnimeSquadron_MapsCache.json") then
-            local succ, data = pcall(function() return HttpService:JSONDecode(readfile("AnimeSquadron_MapsCache.json")) end)
+        if isfile and readfile and isfile(basePath .. "/MapsCache.json") then
+            local succ, data = pcall(function() return HttpService:JSONDecode(readfile(basePath .. "/MapsCache.json")) end)
             if succ and type(data) == "table" then
                 traitMaps = data
             end
@@ -168,6 +182,7 @@ local Tabs = {
     Sniper = Window:AddTab({ Title = "Challenge Sniper", Icon = "target" }),
     Maps = Window:AddTab({ Title = "Trait Maps", Icon = "map" }),
     Ingame = Window:AddTab({ Title = "Ingame Helper", Icon = "swords" }),
+    PartyMulti = Window:AddTab({ Title = "Party & Multi", Icon = "users" }),
     Priority = Window:AddTab({ Title = "Priority Settings", Icon = "list-ordered" }),
     Webhook = Window:AddTab({ Title = "Webhook", Icon = "link" }),
     Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
@@ -280,15 +295,12 @@ local DropdownSniperSyncMode = Tabs.Ingame:AddDropdown("SniperSyncMode", {
     Multi = false,
     Default = 1,
 })
-
-
--- === EVO & CRAFT UI ===
 Tabs.EvoCraft:AddParagraph({ Title = "Evo & Craft Priority", Content = "Runs in the Lobby. Lower priority than Auto Quest. Evo and Craft will NOT run simultaneously." })
 
 local function getSavedTarget(key, defaultVal)
     local saved = defaultVal
-    if isfile and readfile and isfile("AnimeSquadronSettings/AutoFarm/settings/AutoSave.json") then
-        local succ, content = pcall(function() return readfile("AnimeSquadronSettings/AutoFarm/settings/AutoSave.json") end)
+    if isfile and readfile and isfile(basePath .. "/AutoFarm/settings/AutoSave.json") then
+        local succ, content = pcall(function() return readfile(basePath .. "/AutoFarm/settings/AutoSave.json") end)
         if succ and type(content) == "string" then
             local match = string.match(content, '"idx"%s*:%s*"' .. key .. '".-"value"%s*:%s*"([^"]+)"')
             if match then saved = match end
@@ -356,9 +368,9 @@ end)
 local InputCraftQty = Tabs.EvoCraft:AddInput("CraftQty", { Title = "Quantity to Craft", Default = "1", Numeric = true, Finished = false })
 
 _G.AnimeSquadron_CraftQueue = {}
-if isfile and readfile and isfile("AnimeSquadron_CraftQueue.json") then
+if isfile and readfile and isfile(basePath .. "/CraftQueue.json") then
     pcall(function()
-        local data = game:GetService("HttpService"):JSONDecode(readfile("AnimeSquadron_CraftQueue.json"))
+        local data = game:GetService("HttpService"):JSONDecode(readfile(basePath .. "/CraftQueue.json"))
         if type(data) == "table" then
             _G.AnimeSquadron_CraftQueue = data
         end
@@ -379,7 +391,7 @@ _G.AnimeSquadron_UpdateCraftQueueUI = function()
         CraftQueuePara:SetDesc(table.concat(lines, "\n"))
     end
     if isfile and writefile then
-        pcall(function() writefile("AnimeSquadron_CraftQueue.json", game:GetService("HttpService"):JSONEncode(_G.AnimeSquadron_CraftQueue)) end)
+        pcall(function() writefile(basePath .. "/CraftQueue.json", game:GetService("HttpService"):JSONEncode(_G.AnimeSquadron_CraftQueue)) end)
     end
 end
 _G.AnimeSquadron_UpdateCraftQueueUI()
@@ -419,8 +431,6 @@ Tabs.EvoCraft:AddButton({
 })
 
 local ToggleAutoCraft = Tabs.EvoCraft:AddToggle("AutoCraft", { Title = "ENABLE Auto Craft", Default = false })
-
--- === AUTO REROLL UI ===
 Tabs.AutoReroll:AddParagraph({ Title = "Auto Stat Reroll", Content = "Select a unit. It will automatically lock the specified stats and reroll when Potential reaches 100%." })
 
 local DropdownRerollUnit = Tabs.AutoReroll:AddDropdown("RerollUnit", { Title = "Select Unit", Values = {"(Loading...)"}, Multi = false, Default = 1 })
@@ -458,8 +468,6 @@ end)
 local DropdownLockedStats = Tabs.AutoReroll:AddDropdown("LockedStats", { Title = "Stats to Lock", Values = {"SSS", "SS", "S+", "S", "A+", "A", "B+", "B", "C+", "C", "C-"}, Multi = true, Default = {["SSS"] = true} })
 
 local ToggleAutoReroll = Tabs.AutoReroll:AddToggle("AutoReroll", { Title = "ENABLE Auto Reroll (100% Potential)", Default = false })
-
--- === SHOPS & UPGRADES UI ===
 Tabs.ShopUpgrade:AddParagraph({ Title = "Dynamic Shops", Content = "Merchant lists all possible items. Raid/Event refresh automatically." })
 
 local DropdownMerchantItem = Tabs.ShopUpgrade:AddDropdown("MerchantItem", { Title = "[Merchant] Target Item", Values = {"(Loading Items...)"}, Multi = true, Default = {} })
@@ -545,8 +553,6 @@ end
 Tabs.ShopUpgrade:AddParagraph({ Title = "Perks Upgrades", Content = "Auto upgrade your base stats." })
 local DropdownPerkTarget = Tabs.ShopUpgrade:AddDropdown("PerkTarget", { Title = "Perk Target", Values = {"health", "yen_generation", "yen_max"}, Multi = false, Default = 1 })
 local ToggleAutoPerk = Tabs.ShopUpgrade:AddToggle("AutoPerk", { Title = "ENABLE Auto Perk Upgrade", Default = false })
-
--- === CLAIMS & MISC UI ===
 Tabs.Claims:AddParagraph({ Title = "Auto Claims", Content = "Automatically claims passive rewards." })
 local ToggleAutoPass = Tabs.Claims:AddToggle("AutoPass", { Title = "ENABLE Auto Battlepass", Default = false })
 local ToggleAutoMilestones = Tabs.Claims:AddToggle("AutoMilestones", { Title = "ENABLE Auto Level Milestones", Default = false })
@@ -619,7 +625,7 @@ local StatsParagraph = Tabs.AutoFarm:AddParagraph({
 
 local function saveSessionStats()
     if writefile then
-        pcall(function() writefile("AnimeSquadron_DailyStats.json", game:GetService("HttpService"):JSONEncode(SessionStats)) end)
+        pcall(function() writefile(basePath .. "/DailyStats.json", game:GetService("HttpService"):JSONEncode(SessionStats)) end)
     end
 end
 
@@ -652,8 +658,8 @@ local function resetSessionStats()
 end
 
 local function loadSessionStats()
-    if isfile and readfile and isfile("AnimeSquadron_DailyStats.json") then
-        local s, res = pcall(function() return game:GetService("HttpService"):JSONDecode(readfile("AnimeSquadron_DailyStats.json")) end)
+    if isfile and readfile and isfile(basePath .. "/DailyStats.json") then
+        local s, res = pcall(function() return game:GetService("HttpService"):JSONDecode(readfile(basePath .. "/DailyStats.json")) end)
         if s and type(res) == "table" then
             if res.Date == os.date("%Y-%m-%d") then
                 SessionStats.Matches = res.Matches or 0
@@ -676,10 +682,8 @@ local AutoClaimDaily = Tabs.AutoFarm:AddToggle("AutoClaimDaily", { Title = "Auto
 local AutoClaimBundle = Tabs.AutoFarm:AddToggle("AutoClaimBundle", { Title = "Auto Claim Free Bundle", Default = false })
 local AutoQuest = Tabs.AutoFarm:AddToggle("AutoQuest", { Title = "Auto Quest", Default = false })
 local AutoToggle = Tabs.AutoFarm:AddToggle("MasterAutoRun", { Title = "ENABLE MASTER AUTO FARM", Default = false })
-local AutoReconnect = Tabs.AutoFarm:AddToggle("AutoReconnect", { Title = "ENABLE Auto Reconnect", Default = true })
-
 game:GetService("GuiService").ErrorMessageChanged:Connect(function(errMessage)
-    if errMessage and errMessage ~= "" and Options.AutoReconnect and Options.AutoReconnect.Value then
+    if errMessage and errMessage ~= "" then
         Fluent:Notify({ Title = "Connection Lost", Content = "Auto reconnecting in 5 seconds...", Duration = 5 })
         task.wait(5)
         game:GetService("TeleportService"):Teleport(game.PlaceId, game:GetService("Players").LocalPlayer)
@@ -693,6 +697,64 @@ Tabs.Priority:AddDropdown("Priority2", { Title = "Priority 2", Values = Priority
 Tabs.Priority:AddDropdown("Priority3", { Title = "Priority 3", Values = PriorityList, Multi = false, Default = "Auto Evo" })
 Tabs.Priority:AddDropdown("Priority4", { Title = "Priority 4", Values = PriorityList, Multi = false, Default = "Auto Reroll" })
 
+Tabs.PartyMulti:AddParagraph({ Title = "Auto Party System", Content = "Play with your alt accounts automatically." })
+local TogglePartyMode = Tabs.PartyMulti:AddToggle("PartyMode", { Title = "ENABLE Party Mode", Default = false })
+local DropdownPartyRole = Tabs.PartyMulti:AddDropdown("PartyRole", { Title = "Party Role", Values = {"Host", "Member"}, Multi = false, Default = "Host" })
+local TogglePartyLeaveSync = Tabs.PartyMulti:AddToggle("PartyLeaveSync", { Title = "Sync Leave (Return to Lobby if ANY player leaves)", Default = true })
+
+Tabs.PartyMulti:AddParagraph({ Title = "Host Settings", Content = "If you are Host, specify EXACT usernames of members to wait for." })
+local InputMember1 = Tabs.PartyMulti:AddInput("PartyMember1", { Title = "Wait for Member 1", Default = "", Numeric = false, Finished = false })
+local InputMember2 = Tabs.PartyMulti:AddInput("PartyMember2", { Title = "Wait for Member 2", Default = "", Numeric = false, Finished = false })
+local InputMember3 = Tabs.PartyMulti:AddInput("PartyMember3", { Title = "Wait for Member 3", Default = "", Numeric = false, Finished = false })
+local SliderHostTimeout = Tabs.PartyMulti:AddSlider("HostWaitTimeout", { Title = "Host Wait Timeout (Minutes)", Description = "Start without them if they take too long", Default = 5, Min = 1, Max = 10, Rounding = 0 })
+
+Tabs.PartyMulti:AddParagraph({ Title = "Member Settings", Content = "If you are a Member, specify the EXACT username of the Host you want to follow." })
+local InputHostName = Tabs.PartyMulti:AddInput("PartyHostName", { Title = "Host Username", Default = "", Numeric = false, Finished = false })
+_G.AnimeSquadron_UserCache = _G.AnimeSquadron_UserCache or {}
+local function resolveUsernameToID(username)
+    if not username or username == "" then return nil end
+    local lower = string.lower(username)
+    if _G.AnimeSquadron_UserCache[lower] then return _G.AnimeSquadron_UserCache[lower] end
+    
+    local succ, res = pcall(function()
+        local req
+        if request then req = request
+        elseif http_request then req = http_request
+        elseif HttpService and HttpService.RequestInternal then
+        end
+        if req then
+            local reqData = HttpService:JSONEncode({ usernames = {username}, excludeBannedUsers = true })
+            local resp = req({
+                Url = "https://users.roblox.com/v1/usernames/users",
+                Method = "POST",
+                Headers = {["Content-Type"] = "application/json"},
+                Body = reqData
+            })
+            if not resp or not resp.Body or string.find(resp.Body, "Too many requests") then
+                resp = req({
+                    Url = "https://users.roproxy.com/v1/usernames/users",
+                    Method = "POST",
+                    Headers = {["Content-Type"] = "application/json"},
+                    Body = reqData
+                })
+            end
+            
+            if resp and resp.Body then
+                local data = HttpService:JSONDecode(resp.Body)
+                if data and data.data and data.data[1] and data.data[1].id then
+                    return data.data[1].id
+                end
+            end
+        end
+        return nil
+    end)
+    if succ and res then
+        _G.AnimeSquadron_UserCache[lower] = res
+        return res
+    end
+    return nil
+end
+
 Tabs.Webhook:AddParagraph({ Title = "Discord Webhook", Content = "Automatic status reporter" })
 local WebhookURL = Tabs.Webhook:AddInput("WebhookURL", { Title = "Webhook URL", Default = "", Numeric = false, Finished = false, Placeholder = "https://discord.com/api/webhooks/..." })
 local WebhookOnDrop = Tabs.Webhook:AddToggle("WebhookOnDrop", { Title = "Send on Item Drop (Traits/Cubes)", Default = false })
@@ -705,8 +767,8 @@ SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 SaveManager:IgnoreThemeSettings()
 SaveManager:SetIgnoreIndexes({})
-InterfaceManager:SetFolder("AnimeSquadronSettings")
-SaveManager:SetFolder("AnimeSquadronSettings/AutoFarm")
+InterfaceManager:SetFolder(basePath)
+SaveManager:SetFolder(basePath .. "/AutoFarm")
 
 InterfaceManager:BuildInterfaceSection(Tabs.Settings)
 SaveManager:BuildConfigSection(Tabs.Settings)
@@ -738,6 +800,17 @@ if isLobby then
     local create_room = ReplicatedStorage.Remotes.Play:WaitForChild("create_room", 10)
     local start_remote = ReplicatedStorage.Remotes.Play:WaitForChild("start", 10)
     local get_challenges = ReplicatedStorage.Remotes.Play:WaitForChild("get_challenges", 10)
+    local update_lobby = ReplicatedStorage.Remotes.Play:WaitForChild("update_lobby", 10)
+    local join_remote = ReplicatedStorage.Remotes.Play:WaitForChild("join", 10)
+    
+    local activeRooms = {}
+    if update_lobby then
+        update_lobby.OnClientEvent:Connect(function(data)
+            if type(data) == "table" then
+                activeRooms = data
+            end
+        end)
+    end
     
     local dailyCompleted = false
     local lastDailyWorld = ""
@@ -747,6 +820,35 @@ if isLobby then
     pcall(function() util = require(Players.LocalPlayer.PlayerScripts.Client.Utility) end)
     
     local function joinRoom(act, diff, mode, world, rewards, capStr, maxCap, capType)
+        if Options.PartyMode and Options.PartyMode.Value then
+            if Options.PartyRole.Value == "Member" then
+                local hostUsername = Options.PartyHostName and Options.PartyHostName.Value
+                local hostId = nil
+                
+                if not hostUsername or hostUsername == "" then
+                    Fluent:Notify({ Title = "Party Error", Content = "Please enter Host Username", Duration = 3 })
+                    return false
+                end
+                
+                hostId = resolveUsernameToID(hostUsername)
+                if not hostId then
+                    Fluent:Notify({ Title = "Party Error", Content = "Invalid Host Username (Cannot resolve to ID)", Duration = 3 })
+                    return false
+                end
+                
+                local currentRoom = activeRooms[hostId] or activeRooms[tonumber(hostId)] or activeRooms[tostring(hostId)]
+                if currentRoom then
+                    Fluent:Notify({ Title = "Party System", Content = "Joining Host's Room!", Duration = 3 })
+                    if join_remote then pcall(function() join_remote:InvokeServer(hostId) end) end
+                    task.wait(10)
+                    return true
+                else
+                    Fluent:Notify({ Title = "Party System", Content = "Waiting for Host to create a room...", Duration = 3 })
+                    return false
+                end
+            end
+        end
+
         if isfile and writefile then
             if capStr and maxCap then
                 pcall(function()
@@ -756,11 +858,11 @@ if isLobby then
                         worldName = world,
                         capType = capType
                     }
-                    writefile("AnimeSquadron_CurrentTarget.json", HttpService:JSONEncode(dataToSave))
+                    writefile(basePath .. "/CurrentTarget.json", HttpService:JSONEncode(dataToSave))
                 end)
             else
-                if isfile("AnimeSquadron_CurrentTarget.json") and delfile then
-                    pcall(function() delfile("AnimeSquadron_CurrentTarget.json") end)
+                if isfile(basePath .. "/CurrentTarget.json") and delfile then
+                    pcall(function() delfile(basePath .. "/CurrentTarget.json") end)
                 end
             end
         end
@@ -776,6 +878,81 @@ if isLobby then
         })
         
         if success then
+            if Options.PartyMode and Options.PartyMode.Value and Options.PartyRole.Value == "Host" then
+                local membersToWait = {}
+                local m1 = Options.PartyMember1 and Options.PartyMember1.Value; if m1 and m1 ~= "" then table.insert(membersToWait, {name = m1, key = "PartyMember1"}) end
+                local m2 = Options.PartyMember2 and Options.PartyMember2.Value; if m2 and m2 ~= "" then table.insert(membersToWait, {name = m2, key = "PartyMember2"}) end
+                local m3 = Options.PartyMember3 and Options.PartyMember3.Value; if m3 and m3 ~= "" then table.insert(membersToWait, {name = m3, key = "PartyMember3"}) end
+                
+                local memberData = {}
+                for _, m in ipairs(membersToWait) do
+                    local id = resolveUsernameToID(m.name)
+                    if id then 
+                        memberData[tostring(id)] = {name = m.name, key = m.key}
+                    end
+                end
+                
+                if next(memberData) then
+                    local waitingNames = {}
+                    for _, data in pairs(memberData) do table.insert(waitingNames, data.name) end
+                    Fluent:Notify({ Title = "Party System", Content = "Waiting for members: " .. table.concat(waitingNames, ", "), Duration = 5 })
+                    
+                    local timeoutMins = (Options.HostWaitTimeout and Options.HostWaitTimeout.Value) or 5
+                    local endTime = os.time() + (timeoutMins * 60)
+                    local hostIdStr = tostring(game.Players.LocalPlayer.UserId)
+                    
+                    while os.time() < endTime do
+                        local allJoined = true
+                        local currentRoom = activeRooms[hostIdStr] or activeRooms[tonumber(hostIdStr)]
+                        
+                        if currentRoom and currentRoom.players then
+                            local joinedIds = {}
+                            for _, p in pairs(currentRoom.players) do
+                                joinedIds[tostring(p)] = true
+                            end
+                            for id, _ in pairs(memberData) do
+                                if not joinedIds[id] then
+                                    allJoined = false
+                                    break
+                                end
+                            end
+                        else
+                            allJoined = false
+                        end
+                        
+                        if allJoined then break end
+                        task.wait(1)
+                    end
+                    
+                    -- Check who failed to join
+                    local currentRoom = activeRooms[hostIdStr] or activeRooms[tonumber(hostIdStr)]
+                    local joinedIds = {}
+                    if currentRoom and currentRoom.players then
+                        for _, p in pairs(currentRoom.players) do joinedIds[tostring(p)] = true end
+                    end
+                    
+                    local missingMembers = {}
+                    for id, data in pairs(memberData) do
+                        if not joinedIds[id] then
+                            table.insert(missingMembers, data.name)
+                            if Options[data.key] then
+                                Options[data.key]:SetValue("")
+                            end
+                        end
+                    end
+                    
+                    if #missingMembers > 0 then
+                        local msg = "Members failed to join (Crashed): " .. table.concat(missingMembers, ", ") .. ". They have been REMOVED from the Wait List."
+                        Fluent:Notify({ Title = "Party Timeout", Content = msg, Duration = 10 })
+                        if sendWebhookData then
+                            task.spawn(function()
+                                sendWebhookData("🔴 **PARTY TIMEOUT**\n" .. msg, 0xFF0000)
+                            end)
+                        end
+                    end
+                end
+            end
+        
             task.wait(1.5)
             pcall(function() start_remote:InvokeServer() end)
             task.wait(10)
@@ -885,8 +1062,6 @@ if isLobby then
                 end
                 return needToMap
             end
-            
-            -- Claims & Misc
             if Options.AutoPass and Options.AutoPass.Value then
                 pcall(function() game:GetService("ReplicatedStorage").Remotes.Battlepass.claim_all:InvokeServer() end)
             end
@@ -896,13 +1071,9 @@ if isLobby then
             if Options.AutoDiscovery and Options.AutoDiscovery.Value then
                 pcall(function() game:GetService("ReplicatedStorage").Remotes.Characters.claim_all_index:InvokeServer() end)
             end
-            
-            -- Perks
             if Options.AutoPerk and Options.AutoPerk.Value then
                 pcall(function() game:GetService("ReplicatedStorage").Remotes.Perks.upgrade:InvokeServer(Options.PerkTarget.Value) end)
             end
-            
-            -- Shops
             local function tryBuyShop(toggleOpt, itemOpt, shopId)
                 if toggleOpt and toggleOpt.Value then
                     local items = itemOpt and itemOpt.Value
@@ -1101,6 +1272,8 @@ if isLobby then
                 local unit = util.data.characters[targetId]
                 if not unit then return false end
                 
+                if _G.DEBUG_REROLL then print("[AutoReroll] Checking unit:", unit.name, "Potential:", unit.potential) end
+                
                 if unit.potential and tonumber(unit.potential) >= 1000 then
                     local locksToApply = {}
                     local lockToggles = {}
@@ -1113,8 +1286,10 @@ if isLobby then
                     local hasUnlock = false
                     if unit.ranks then
                         for statName, rank in pairs(unit.ranks) do
+                            if _G.DEBUG_REROLL then print("[AutoReroll] Stat:", statName, "Rank:", rank) end
                             if lockToggles[rank] then
                                 locksToApply[statName] = true
+                                if _G.DEBUG_REROLL then print("[AutoReroll] Locking:", statName) end
                             else
                                 hasUnlock = true
                             end
@@ -1122,6 +1297,8 @@ if isLobby then
                     else
                         hasUnlock = true
                     end
+                    
+                    if _G.DEBUG_REROLL then print("[AutoReroll] hasUnlock:", hasUnlock) end
                     
                     if hasUnlock then
                         local rerollRemote = game:GetService("ReplicatedStorage").Remotes:FindFirstChild("Stat_Reroll")
@@ -1177,13 +1354,13 @@ if isLobby then
                 cfg.paragraph:SetDesc(contentStr)
             end
             
-            if Options.MasterAutoRun.Value and get_challenges and create_room then
+            if Options.MasterAutoRun.Value and get_challenges and create_room and not (Options.PartyMode and Options.PartyMode.Value and Options.PartyRole.Value == "Member") then
                 local succ, challengeData = pcall(function() return get_challenges:InvokeServer() end)
                 local joinedSomething = false
                 
                 if succ and type(challengeData) == "table" then
                     if isfile and writefile then
-                        pcall(function() writefile("AnimeSquadron_LastSnipeCheck.txt", tostring(math.floor(os.time() / 1800))) end)
+                        pcall(function() writefile(basePath .. "/LastSnipeCheck.txt", tostring(math.floor(os.time() / 1800))) end)
                     end
                 end
                 
@@ -1218,6 +1395,7 @@ if isLobby then
                         Fluent:Notify({ Title = "Auto Quest", Content = "Joining Ninja Village Act 1 for Quest!", Duration = 3 })
                         joinRoom(activeQuestMap.act, activeQuestMap.diff, activeQuestMap.mode, activeQuestMap.world, nil, nil, nil)
                     end
+                elseif handled then
                 elseif succ and type(challengeData) == "table" and Options.AutoJoin1d.Value and challengeData["1d"] and not dailyCompleted then
                     Fluent:Notify({ Title = "Sniper", Content = "Joining Daily Challenge!", Duration = 3 })
                     local s, err = joinRoom(challengeData["1d"].act, "1d", "Challenge", challengeData["1d"].world, challengeData["1d"].rewards, nil, nil)
@@ -1260,8 +1438,8 @@ else
     local targetMaxCap = nil
     local targetCapType = nil
     
-    if isfile and readfile and isfile("AnimeSquadron_CurrentTarget.json") then
-        local succ, parsed = pcall(function() return HttpService:JSONDecode(readfile("AnimeSquadron_CurrentTarget.json")) end)
+    if isfile and readfile and isfile(basePath .. "/CurrentTarget.json") then
+        local succ, parsed = pcall(function() return HttpService:JSONDecode(readfile(basePath .. "/CurrentTarget.json")) end)
         if succ and parsed then
             targetCapStr = parsed.capStr
             targetMaxCap = parsed.maxCap
@@ -1322,6 +1500,13 @@ else
             end
         end)
     end
+    
+    game.Players.PlayerRemoving:Connect(function(player)
+        if Options.PartyMode and Options.PartyMode.Value and Options.PartyLeaveSync and Options.PartyLeaveSync.Value then
+            forceTeleportToLobby("Party Sync", "Player " .. player.Name .. " left the match! Returning to lobby...")
+        end
+    end)
+
     
     if messageEvent then
         messageEvent.OnClientEvent:Connect(function(msg, msgType)
@@ -1498,8 +1683,8 @@ else
             if not isTeleporting and Options.AutoSniperSync and Options.AutoSniperSync.Value and Options.SniperSyncMode.Value == "Instant (Abort Match)" then
                 local currentBoundary = math.floor(os.time() / 1800)
                 local lastCheck = 0
-                if isfile and readfile and isfile("AnimeSquadron_LastSnipeCheck.txt") then
-                    pcall(function() lastCheck = tonumber(readfile("AnimeSquadron_LastSnipeCheck.txt")) or 0 end)
+                if isfile and readfile and isfile(basePath .. "/LastSnipeCheck.txt") then
+                    pcall(function() lastCheck = tonumber(readfile(basePath .. "/LastSnipeCheck.txt")) or 0 end)
                 end
                 
                 if currentBoundary > lastCheck then
@@ -1544,8 +1729,8 @@ else
                     if not isTeleporting and Options.AutoSniperSync and Options.AutoSniperSync.Value and Options.SniperSyncMode.Value == "Safe (At EndScreen)" then
                         local currentBoundary = math.floor(os.time() / 1800)
                         local lastCheck = 0
-                        if isfile and readfile and isfile("AnimeSquadron_LastSnipeCheck.txt") then
-                            pcall(function() lastCheck = tonumber(readfile("AnimeSquadron_LastSnipeCheck.txt")) or 0 end)
+                        if isfile and readfile and isfile(basePath .. "/LastSnipeCheck.txt") then
+                            pcall(function() lastCheck = tonumber(readfile(basePath .. "/LastSnipeCheck.txt")) or 0 end)
                         end
                         if currentBoundary > lastCheck then
                             forceTeleportToLobby("Sniper Sync", "New 30m window! Returning to lobby for challenges...")
@@ -1761,14 +1946,14 @@ task.spawn(function()
         if Options.WebhookOnInterval and Options.WebhookOnInterval.Value and Options.WebhookURL and Options.WebhookURL.Value ~= "" then
             local interval = tonumber(Options.WebhookInterval.Value) or 10
             local lastSend = 0
-            if isfile and readfile and isfile("AnimeSquadron_LastWebhook.txt") then
-                pcall(function() lastSend = tonumber(readfile("AnimeSquadron_LastWebhook.txt")) or 0 end)
+            if isfile and readfile and isfile(basePath .. "/LastWebhook.txt") then
+                pcall(function() lastSend = tonumber(readfile(basePath .. "/LastWebhook.txt")) or 0 end)
             end
             
             if os.time() - lastSend >= (interval * 60) then
                 local success = sendWebhookData("INTERVAL")
                 if success and writefile then
-                    pcall(function() writefile("AnimeSquadron_LastWebhook.txt", tostring(os.time())) end)
+                    pcall(function() writefile(basePath .. "/LastWebhook.txt", tostring(os.time())) end)
                 end
             end
         end
@@ -1942,3 +2127,5 @@ local function createMobileToggle()
     end)
 end
 createMobileToggle()
+
+
