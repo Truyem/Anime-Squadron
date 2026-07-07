@@ -746,9 +746,11 @@ Tabs.AutoReroll:AddParagraph({ Title = L.RerollCfg, Content = L.RerollCfgD })
 
 local DropdownRerollUnit = Tabs.AutoReroll:AddDropdown("RerollUnit", { Title = L.RerollUnit, Description = L.RerollUnitD, Values = {"(Loading...)"}, Multi = false, Default = 1 })
 
-task.spawn(function()
-    local util
-    while task.wait(3) do
+Tabs.AutoReroll:AddButton({
+    Title = "Refresh Unit List",
+    Description = "Manually refresh the list of equipped units.",
+    Callback = function()
+        local util
         pcall(function() util = require(game:GetService("Players").LocalPlayer.PlayerScripts.Client.Utility) end)
         if util and util.data and util.data.characters then
             local unitList = {}
@@ -768,9 +770,53 @@ task.spawn(function()
             end
             
             DropdownRerollUnit:SetValues(unitList)
-            
             if currentVal and not found then
                 DropdownRerollUnit:SetValue(unitList[1])
+            elseif currentVal and found then
+                DropdownRerollUnit:SetValue(currentVal)
+            end
+        end
+    end
+})
+
+task.spawn(function()
+    local util
+    while task.wait(3) do
+        pcall(function() util = require(game:GetService("Players").LocalPlayer.PlayerScripts.Client.Utility) end)
+        if util and util.data and util.data.characters then
+            local unitList = {}
+            for k, v in pairs(util.data.characters) do
+                if v.equipped == true then
+                    table.insert(unitList, v.name .. " [" .. tostring(k) .. "]")
+                end
+            end
+            if #unitList == 0 then table.insert(unitList, "(No Equipped Units)") end
+            
+            local currentVals = DropdownRerollUnit.Values or {}
+            local isDiff = false
+            if #unitList ~= #currentVals then
+                isDiff = true
+            else
+                for i = 1, #unitList do
+                    if unitList[i] ~= currentVals[i] then isDiff = true break end
+                end
+            end
+            
+            if isDiff then
+                local currentVal = Options.RerollUnit and Options.RerollUnit.Value
+                local found = false
+                if currentVal then
+                    for _, u in ipairs(unitList) do
+                        if u == currentVal then found = true break end
+                    end
+                end
+                
+                DropdownRerollUnit:SetValues(unitList)
+                if currentVal and not found then
+                    DropdownRerollUnit:SetValue(unitList[1])
+                elseif currentVal and found then
+                    DropdownRerollUnit:SetValue(currentVal)
+                end
             end
         end
     end
