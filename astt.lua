@@ -276,6 +276,8 @@ local Locales = {
         WinTitle = "Free HUB", WinSub = "Anime Squadron",
         TabAutoFarm = "Auto Farm", TabPriority = "Priority Settings", TabMaps = "Trait Maps", TabEvo = "Evo & Craft", TabReroll = "Auto Reroll", TabShop = "Shop & Upgrades", TabClaims = "Claims & Misc", TabSniper = "Challenge Sniper", TabIngame = "Ingame Helper", TabParty = "Party & Multi", TabWebhook = "Webhook", TabSettings = "Settings",
         
+        StuckAutoHop = "Auto Server Hop (Stuck Failsafe)", StuckAutoHopD = "Automatically hops to another server if stuck in the Lobby for too long.",
+        StuckTimeout = "Stuck Timeout (Seconds)", StuckTimeoutD = "Time in seconds before hopping.",
         SniperCfg = "Sniper Configuration", SniperCfgD = "Used in Lobby. Checked with highest priority.",
         Snip1d = "Enable Daily Challenge (1d)", Snip1dD = "Auto joins the daily challenge.",
         Snip30m = "Enable Regular Challenge (30m)", Snip30mD = "Auto joins the regular 30m challenge.",
@@ -373,6 +375,8 @@ local Locales = {
         WinTitle = "Free HUB", WinSub = "Anime Squadron",
         TabAutoFarm = "Auto Farm", TabPriority = "Cài đặt Ưu tiên", TabMaps = "Bản đồ Trait", TabEvo = "Tiến hoá & Ghép", TabReroll = "Auto Đập Chỉ số", TabShop = "Cửa hàng & Nâng cấp", TabClaims = "Nhận thưởng & Code", TabSniper = "Săn Challenge", TabIngame = "Hỗ trợ Trong Game", TabParty = "Tổ đội (Nhiều Acc)", TabWebhook = "Thông báo Webhook", TabSettings = "Cài đặt (Settings)",
         
+        StuckAutoHop = "BẬT Tự động Đổi Server (Chống Kẹt)", StuckAutoHopD = "Tự động tìm server khác nếu kẹt ở Sảnh quá lâu.",
+        StuckTimeout = "Thời gian chờ Kẹt (Giây)", StuckTimeoutD = "Số giây kẹt trước khi đổi server.",
         SniperCfg = "Cấu hình Săn Challenge", SniperCfgD = "Chỉ chạy ở sảnh (Lobby). Độ ưu tiên cao nhất, luôn được check đầu tiên.",
         Snip1d = "Bật Săn Thử thách Hàng ngày (1d)", Snip1dD = "Tự động vào map Thử thách Hàng ngày.",
         Snip30m = "Bật Săn Thử thách Thường (30m)", Snip30mD = "Tự động vào map 30 phút mỗi khi làm mới.",
@@ -1151,8 +1155,8 @@ local WebhookOnMatchEnd = Tabs.Webhook:AddToggle("WebhookOnMatchEnd", { Title = 
 local WebhookOnInterval = Tabs.Webhook:AddToggle("WebhookOnInterval", { Title = L.WbInt, Description = L.WbIntD, Default = false })
 local WebhookOnEvoCraft = Tabs.Webhook:AddToggle("WebhookOnEvoCraft", { Title = L.WbEvo, Description = L.WbEvoD, Default = false })
 local WebhookInterval = Tabs.Webhook:AddSlider("WebhookInterval", { Title = L.WbTime, Description = L.WbTimeD, Default = 10, Min = 1, Max = 60, Rounding = 0 })
-
-
+Tabs.Settings:AddToggle("StuckAutoHop", { Title = L.StuckAutoHop, Description = L.StuckAutoHopD, Default = true })
+Tabs.Settings:AddSlider("StuckTimeout", { Title = L.StuckTimeout, Description = L.StuckTimeoutD, Default = 60, Min = 30, Max = 300, Rounding = 0 })
 
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
@@ -1373,11 +1377,48 @@ if isLobby then
     _G.AnimeSquadronMainLoop = (_G.AnimeSquadronMainLoop or 0) + 1
     local currentLoopId = _G.AnimeSquadronMainLoop
     task.spawn(function()
+        task.wait(10) -- Initial delay to allow Evo/Craft to load their data fully before skipping to Trait Maps
         local lastClaimTime = 0
+        local lobbyEnterTime = os.time()
         local buyingDebounce = {}
         while true do
             task.wait(3)
             if _G.AnimeSquadronMainLoop ~= currentLoopId then return end
+            
+            if Options.MasterAutoRun.Value then
+                if Options.StuckAutoHop and Options.StuckAutoHop.Value then
+                    local timeout = Options.StuckTimeout and Options.StuckTimeout.Value or 60
+                    if os.time() - lobbyEnterTime > timeout then
+                        -- Handle Hopping
+                        local req = request or http_request or (syn and syn.request)
+                        local HttpService = game:GetService("HttpService")
+                        local TeleportService = game:GetService("TeleportService")
+                        if req then
+                            pcall(function()
+                                local res = req({
+                                    Url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100",
+                                    Method = "GET"
+                                })
+                                if res and res.Body then
+                                    local data = HttpService:JSONDecode(res.Body)
+                                    if data and data.data then
+                                        for _, v in pairs(data.data) do
+                                            if type(v) == "table" and v.playing and v.maxPlayers and v.playing < v.maxPlayers and v.id ~= game.JobId then
+                                                TeleportService:TeleportToPlaceInstance(game.PlaceId, v.id, game:GetService("Players").LocalPlayer)
+                                                task.wait(2)
+                                            end
+                                        end
+                                    end
+                                end
+                            end)
+                        end
+                        TeleportService:Teleport(game.PlaceId, game:GetService("Players").LocalPlayer)
+                        task.wait(10)
+                    end
+                end
+            else
+                lobbyEnterTime = os.time()
+            end
             
             if os.time() - lastClaimTime > 60 then
                 lastClaimTime = os.time()
@@ -1726,6 +1767,8 @@ if isLobby then
                     end
                 end
             end
+            
+            if handled then lobbyEnterTime = os.time() end
             
             if StatusParagraph then
                 if #activeQuestTexts > 0 then
