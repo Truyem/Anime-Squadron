@@ -1554,20 +1554,26 @@ if isLobby then
             
             local function runAutoCraft()
                 if not (Options.AutoCraft and Options.AutoCraft.Value) then return false end
-                if not (util and util.data and util.data.stats and util.data.stats.Gold) then return false end
+                if not (util and util.data and util.data.stats and util.data.stats.Gold) then 
+                    table.insert(activeQuestTexts, "Waiting for Player Data...")
+                    return true 
+                end
                 local currentTask = _G.AnimeSquadron_CraftQueue[1]
                 if not currentTask then
-                    ToggleAutoCraft:SetValue(false)
-                    return false
+                    table.insert(activeQuestTexts, "Auto Craft is ON but Queue is Empty. Idling...")
+                    return true
                 end
                 
                 local targetName = currentTask.name
                 local targetQty = currentTask.qty
                 local get = game:GetService("ReplicatedStorage").Remotes.Crafting:WaitForChild("get", 5)
-                if not get then return false end
+                if not get then return true end
                 
                 local succ, recipes = pcall(function() return get:InvokeServer() end)
-                if not succ or type(recipes) ~= "table" or not recipes[targetName] then return false end
+                if not succ or type(recipes) ~= "table" or not recipes[targetName] then 
+                    table.insert(activeQuestTexts, "Waiting for Recipe Data...")
+                    return true 
+                end
                 
                 local recipe = recipes[targetName]
                 local missingMats = {}
@@ -1629,9 +1635,15 @@ if isLobby then
             
             local function runAutoEvo()
                 if not (Options.AutoEvo and Options.AutoEvo.Value) then return false end
-                if not (util and util.data and util.data.stats and util.data.stats.Gold) then return false end
+                if not (util and util.data and util.data.stats and util.data.stats.Gold) then 
+                    table.insert(activeQuestTexts, "Waiting for Player Data...")
+                    return true 
+                end
                 local targetName = Options.EvoTarget and Options.EvoTarget.Value
-                if not targetName or targetName == "(None)" or string.find(targetName, "Waiting") then return false end
+                if not targetName or targetName == "(None)" or string.find(targetName, "Waiting") then 
+                    table.insert(activeQuestTexts, "Auto Evo is ON but no unit selected. Idling...")
+                    return true 
+                end
                 local targetQty = 1
                 
                 local template = game:GetService("ReplicatedStorage").Characters:FindFirstChild(targetName)
