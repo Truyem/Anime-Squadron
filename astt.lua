@@ -163,9 +163,226 @@ else
     loadCache()
 end
 
+local isfile = isfile or function() return false end
+local readfile = readfile or function() return "" end
+local writefile = writefile or function() end
+local makefolder = makefolder or function() end
+local isfolder = isfolder or function() return false end
+
+if not isfolder("as_free") then pcall(function() makefolder("as_free") end) end
+
+local currentLang = "EN"
+pcall(function()
+    if isfile("as_free/Language.txt") then
+        local l = readfile("as_free/Language.txt")
+        if l == "VN" or l == "EN" then currentLang = l end
+    else
+        writefile("as_free/Language.txt", "EN")
+    end
+end)
+
+local Locales = {
+    EN = {
+        WinTitle = "Free HUB", WinSub = "Anime Squadron",
+        TabAutoFarm = "Auto Farm", TabPriority = "Priority Settings", TabMaps = "Trait Maps", TabEvo = "Evo & Craft", TabReroll = "Auto Reroll", TabShop = "Shop & Upgrades", TabClaims = "Claims & Misc", TabSniper = "Challenge Sniper", TabIngame = "Ingame Helper", TabParty = "Party & Multi", TabWebhook = "Webhook", TabSettings = "Settings",
+        
+        SniperCfg = "Sniper Configuration", SniperCfgD = "Used in Lobby. Checked with highest priority.",
+        Snip1d = "Enable Daily Challenge (1d)", Snip1dD = "Auto joins the daily challenge.",
+        Snip30m = "Enable Regular Challenge (30m)", Snip30mD = "Auto joins the regular 30m challenge.",
+        SnipTarget = "Target Items (Regular 30m)", SnipTargetD = "Select which items you want to snipe.",
+        
+        MapCfg = "Configuration Guide", MapCfgD = "Enter 'Priority' (lower number = higher priority). Enter 0 to skip.",
+        MapNoData = "No Data Found", MapNoDataD = "Execute this script in the Lobby at least once to cache Map data!",
+        MapTrack = "Tracking current limit.", MapPriority = "Priority (0 = Skip)", MapPriorityD = "Set priority for this map.", MapDiff = "Difficulty", MapDiffD = "Select Normal or Hard.",
+        
+        IgUtil = "Ingame Utilities", IgUtilD = "Only active during a match.",
+        IgAutoPlay = "ENABLE Official Auto Play", IgAutoPlayD = "Turns on the game's official Auto Play feature.",
+        IgAutoLeave = "ENABLE Auto Leave (On Max Limit/Cant Replay)", IgAutoLeaveD = "Leaves match if you hit cap limit.",
+        IgAutoLeaveBase = "ENABLE Auto Leave (Base 0 HP Failsafe)", IgAutoLeaveBaseD = "Leaves match instantly if base HP hits 0 to save time.",
+        IgAutoReplay = "ENABLE Auto Replay", IgAutoReplayD = "Auto replays the match when it ends.",
+        IgReplayInf = "ENABLE Auto Replay at Wave (Inf Mode)", IgReplayInfD = "Auto replays when hitting a specific wave in Infinite Mode.",
+        IgWaveTarget = "Target Wave to Replay", IgWaveTargetD = "Wave number to trigger replay.",
+        IgSpeed = "ENABLE Auto Speed (Max 2x/3x)", IgSpeedD = "Automatically clicks the 2x/3x speed button.",
+        IgUlt = "ENABLE Auto Ultimate", IgUltD = "Only uses ultimate when enemies are present.",
+        IgSniper = "Challenge Sniper Sync", IgSniperD = "Automatically return to lobby around XX:00 and XX:30 to check new challenges.",
+        IgSniperTog = "ENABLE Sniper Sync", IgSniperTogD = "Leaves match early to catch challenges.",
+        IgSniperMode = "Sync Mode", IgSniperModeD = "Safe = waits for match end. Instant = leaves immediately.",
+        
+        EvoPri = "Evo & Craft Priority", EvoPriD = "Runs in the Lobby. Lower priority than Auto Quest. Evo and Craft will NOT run simultaneously.",
+        EvoTarget = "Evo Target", EvoTargetD = "Select the unit to evolve.",
+        EvoToggle = "ENABLE Auto Evo", EvoToggleD = "Auto evolves the selected unit.",
+        CraftTarget = "Craft Target", CraftTargetD = "Select item to craft.",
+        CraftQty = "Quantity to Craft", CraftQtyD = "How many to craft.",
+        CraftQueue = "Crafting Queue", CraftQueueD = "Current tasks.",
+        CraftAdd = "Add to Queue", CraftAddD = "Add currently selected item and quantity to queue.",
+        CraftClear = "Clear Queue", CraftClearD = "Remove all items from queue.",
+        CraftToggle = "ENABLE Auto Craft", CraftToggleD = "Auto crafts items in the queue.",
+        
+        RerollCfg = "Auto Stat Reroll", RerollCfgD = "Select a unit. It will automatically lock the specified stats and reroll when Potential reaches 100%.",
+        RerollUnit = "Select Unit", RerollUnitD = "Target unit for rerolling.",
+        RerollLock = "Stats to Lock", RerollLockD = "Keep these stats, don't reroll them.",
+        RerollTog = "ENABLE Auto Reroll (100% Potential)", RerollTogD = "Auto rerolls when max potential is reached.",
+        
+        ShopDyn = "Dynamic Shops", ShopDynD = "Merchant lists all possible items. Raid/Event refresh automatically.",
+        MerchItem = "[Merchant] Target Item", MerchItemD = "Items to buy from regular merchant.",
+        MerchTog = "ENABLE Auto Buy [Merchant]", MerchTogD = "Buys targeted items automatically.",
+        RaidItem = "[Raid] Target Item", RaidItemD = "Items to buy from Raid shop.",
+        RaidTog = "ENABLE Auto Buy [Raid Shop]", RaidTogD = "Buys targeted items automatically.",
+        EventItem = "[Event] Target Item", EventItemD = "Items to buy from Event shop.",
+        EventTog = "ENABLE Auto Buy [Event Shop]", EventTogD = "Buys targeted items automatically.",
+        PerkCfg = "Perks Upgrades", PerkCfgD = "Auto upgrade your base stats.",
+        PerkTarget = "Perk Target", PerkTargetD = "Stat to upgrade.",
+        PerkTog = "ENABLE Auto Perk Upgrade", PerkTogD = "Auto buys perk upgrades.",
+        
+        ClaimCfg = "Auto Claims", ClaimCfgD = "Automatically claims passive rewards.",
+        ClaimPass = "ENABLE Auto Battlepass", ClaimPassD = "Claims free pass rewards.",
+        ClaimMile = "ENABLE Auto Level Milestones", ClaimMileD = "Claims level rewards.",
+        ClaimIdx = "ENABLE Auto Discovery Index", ClaimIdxD = "Claims index rewards.",
+        CodeCfg = "Code Redeemer", CodeCfgD = "Auto redeem predefined codes and dynamically scan Update Log.",
+        CodeBtn = "Redeem All Codes", CodeBtnD = "Sends all known codes to the server.",
+        CodeMsgT = "Redeeming Codes", CodeMsg = "Sending codes to server. Check game UI for rewards!",
+        
+        AF_StatL = "Status: LOBBY", AF_StatLD = "Master Auto Farm system is ready.",
+        AF_StatI = "Status: INGAME", AF_StatID = "NOTE: Auto Farm functions will NOT operate while in-game. It will resume automatically in the Lobby.",
+        AF_Sess = "Session Stats (Farmed Today)", AF_SessD = "Matches Played: 0",
+        AF_Friend = "Friends Only", AF_FriendD = "Creates rooms as Friends Only.",
+        AF_Daily = "Auto Claim Daily Rewards", AF_DailyD = "Claims daily login rewards.",
+        AF_Bun = "Auto Claim Free Bundle", AF_BunD = "Claims the free bundle in shop.",
+        AF_Quest = "Auto Quest", AF_QuestD = "Auto accepts and claims quests.",
+        AF_Master = "ENABLE MASTER AUTO FARM", AF_MasterD = "Turns on the entire Auto Farm logic.",
+        
+        PriCfg = "Task Priority", PriCfgD = "Configure which auto farm tasks have priority over others. If a task has no work to do, it will fallback to the next priority. If all tasks are done, it defaults to Auto Farm Map.",
+        Pri1 = "Priority 1 (Highest)", Pri1D = "Runs first.",
+        Pri2 = "Priority 2", Pri2D = "Runs second.",
+        Pri3 = "Priority 3", Pri3D = "Runs third.",
+        Pri4 = "Priority 4", Pri4D = "Runs last.",
+        
+        PtCfg = "Auto Party System", PtCfgD = "Play with your alt accounts automatically.",
+        PtTog = "ENABLE Party Mode", PtTogD = "Turns on the party system.",
+        PtRole = "Party Role", PtRoleD = "Host creates room, Member joins.",
+        PtSync = "Sync Leave", PtSyncD = "Return to Lobby if ANY player leaves.",
+        PtHostCfg = "Host Settings", PtHostCfgD = "If you are Host, specify EXACT usernames of members to wait for.",
+        PtM1 = "Wait for Member 1", PtM1D = "Username of Clone 1.",
+        PtM2 = "Wait for Member 2", PtM2D = "Username of Clone 2.",
+        PtM3 = "Wait for Member 3", PtM3D = "Username of Clone 3.",
+        PtTime = "Host Wait Timeout (Minutes)", PtTimeD = "Start without them if they take too long.",
+        PtMemCfg = "Member Settings", PtMemCfgD = "If you are a Member, specify the EXACT username of the Host you want to follow.",
+        PtHostName = "Host Username", PtHostNameD = "Username of your Main account.",
+        
+        WbCfg = "Discord Webhook", WbCfgD = "Automatic status reporter.",
+        WbUrl = "Webhook URL", WbUrlD = "Link to your discord webhook.",
+        WbDrop = "Send on Item Drop (Traits/Cubes)", WbDropD = "Alerts you when rare items drop.",
+        WbMatch = "Send on Match End (Win/Loss)", WbMatchD = "Sends match results.",
+        WbInt = "Send on Interval", WbIntD = "Sends periodic summary.",
+        WbEvo = "Send on Evo/Craft (Success/Fail)", WbEvoD = "Alerts on craft results.",
+        WbTime = "Interval (Minutes)", WbTimeD = "How often to send summary.",
+        
+        SetLang = "Language / Ngôn ngữ", SetLangD = "Select UI language. Tắt Script đi mở lại để áp dụng!"
+    },
+    VN = {
+        WinTitle = "Free HUB", WinSub = "Anime Squadron",
+        TabAutoFarm = "Auto Farm", TabPriority = "Cài đặt Ưu tiên", TabMaps = "Bản đồ Trait", TabEvo = "Tiến hoá & Ghép", TabReroll = "Auto Đập Chỉ số", TabShop = "Cửa hàng & Nâng cấp", TabClaims = "Nhận thưởng & Code", TabSniper = "Săn Challenge", TabIngame = "Hỗ trợ Trong Game", TabParty = "Tổ đội (Nhiều Acc)", TabWebhook = "Thông báo Webhook", TabSettings = "Cài đặt (Settings)",
+        
+        SniperCfg = "Cấu hình Săn Challenge", SniperCfgD = "Chỉ chạy ở sảnh (Lobby). Độ ưu tiên cao nhất, luôn được check đầu tiên.",
+        Snip1d = "Bật Săn Thử thách Hàng ngày (1d)", Snip1dD = "Tự động vào map Thử thách Hàng ngày.",
+        Snip30m = "Bật Săn Thử thách Thường (30m)", Snip30mD = "Tự động vào map 30 phút mỗi khi làm mới.",
+        SnipTarget = "Mục tiêu Săn (30m)", SnipTargetD = "Chọn các vật phẩm bạn muốn săn.",
+        
+        MapCfg = "Hướng dẫn Cài đặt Map", MapCfgD = "Nhập 'Priority' (độ ưu tiên: số càng nhỏ càng ưu tiên). Nhập 0 để bỏ qua map đó.",
+        MapNoData = "Chưa có dữ liệu", MapNoDataD = "Hãy chạy Script ở sảnh (Lobby) ít nhất 1 lần để tải dữ liệu Map!",
+        MapTrack = "Đang theo dõi giới hạn.", MapPriority = "Độ Ưu Tiên (0 = Bỏ qua)", MapPriorityD = "Thiết lập mức độ ưu tiên cho map này.", MapDiff = "Độ Khó", MapDiffD = "Chọn Normal (Thường) hoặc Hard (Khó).",
+        
+        IgUtil = "Tiện ích Trong Game", IgUtilD = "Chỉ hoạt động khi đang ở trong trận đấu.",
+        IgAutoPlay = "BẬT Auto Play của Game", IgAutoPlayD = "Tự động kích hoạt nút Auto Play có sẵn của game.",
+        IgAutoLeave = "BẬT Tự động Rời Trận (Mắc giới hạn)", IgAutoLeaveD = "Tự rời ván nếu bạn đã cày đủ max giới hạn nguyên liệu.",
+        IgAutoLeaveBase = "BẬT Tự động Rời Trận (Bảo vệ Base)", IgAutoLeaveBaseD = "Tự rời ván ngay lập tức nếu nhà chính (Base) còn 0 máu để tiết kiệm thời gian.",
+        IgAutoReplay = "BẬT Tự động Chơi lại", IgAutoReplayD = "Tự động bấm chơi lại khi hết ván.",
+        IgReplayInf = "BẬT Chơi lại ở Wave (Chế độ Vô tận)", IgReplayInfD = "Tự động chơi lại khi đạt đến số Wave chỉ định ở chế độ Vô tận.",
+        IgWaveTarget = "Mục tiêu Wave để Chơi lại", IgWaveTargetD = "Số wave để kích hoạt chơi lại.",
+        IgSpeed = "BẬT Tự động Tua Nhanh (Max 2x/3x)", IgSpeedD = "Tự động bấm nút tua nhanh 2x hoặc 3x.",
+        IgUlt = "BẬT Tự động dùng Chiêu cuối (Ultimate)", IgUltD = "Chỉ sử dụng chiêu cuối khi có quái trên bản đồ.",
+        IgSniper = "Đồng bộ Săn Challenge", IgSniperD = "Tự động quay về sảnh lúc XX:00 và XX:30 để canh Challenge mới.",
+        IgSniperTog = "BẬT Đồng bộ Săn Challenge", IgSniperTogD = "Rời trận sớm để kịp giờ săn.",
+        IgSniperMode = "Chế độ Đồng bộ", IgSniperModeD = "Safe = Đợi hết ván mới out. Instant = Thoát ngay lập tức bất chấp.",
+        
+        EvoPri = "Cài đặt Tiến hoá & Ghép", EvoPriD = "Chỉ chạy ở sảnh. Độ ưu tiên thấp hơn Nhiệm vụ. Evo và Craft sẽ KHÔNG chạy cùng lúc để tránh kẹt.",
+        EvoTarget = "Mục tiêu Tiến hoá", EvoTargetD = "Chọn nhân vật bạn muốn tiến hoá.",
+        EvoToggle = "BẬT Tự động Tiến hoá (Auto Evo)", EvoToggleD = "Tự động tiến hoá nhân vật đã chọn khi đủ nguyên liệu.",
+        CraftTarget = "Mục tiêu Ghép (Craft)", CraftTargetD = "Chọn vật phẩm bạn muốn ghép.",
+        CraftQty = "Số lượng cần Ghép", CraftQtyD = "Số lượng vật phẩm cần tạo ra.",
+        CraftQueue = "Hàng đợi Ghép", CraftQueueD = "Danh sách các vật phẩm đang chờ ghép.",
+        CraftAdd = "Thêm vào Hàng đợi", CraftAddD = "Thêm vật phẩm và số lượng hiện tại vào hàng đợi.",
+        CraftClear = "Xoá Hàng đợi", CraftClearD = "Xoá toàn bộ vật phẩm khỏi hàng đợi.",
+        CraftToggle = "BẬT Tự động Ghép (Auto Craft)", CraftToggleD = "Tự động ghép các vật phẩm trong hàng đợi.",
+        
+        RerollCfg = "Tự động Đập Chỉ số (Trait)", RerollCfgD = "Chọn nhân vật và các dòng chỉ số cần giữ lại. Nó sẽ tự động khoá dòng và đập khi Thanh Tiềm Năng (Potential) đạt 100%.",
+        RerollUnit = "Chọn Nhân Vật", RerollUnitD = "Nhân vật mục tiêu để đập chỉ số.",
+        RerollLock = "Các Chỉ số cần Giữ (Khoá)", RerollLockD = "Giữ lại những dòng này, không đập mất.",
+        RerollTog = "BẬT Tự động Đập Chỉ số", RerollTogD = "Chỉ đập khi Tiềm năng max 100%.",
+        
+        ShopDyn = "Cửa hàng Thông minh", ShopDynD = "Thương gia (Merchant) hiển thị toàn bộ đồ. Raid/Event tự động làm mới.",
+        MerchItem = "[Thương Gia] Mục tiêu Mua", MerchItemD = "Chọn đồ muốn mua từ Thương gia.",
+        MerchTog = "BẬT Tự động Mua [Thương Gia]", MerchTogD = "Tự động mua đồ đã chọn khi thương gia xuất hiện.",
+        RaidItem = "[Raid] Mục tiêu Mua", RaidItemD = "Chọn đồ muốn mua từ Shop Raid.",
+        RaidTog = "BẬT Tự động Mua [Shop Raid]", RaidTogD = "Tự động gom đồ Raid đã chọn.",
+        EventItem = "[Sự Kiện] Mục tiêu Mua", EventItemD = "Chọn đồ muốn mua từ Shop Sự kiện.",
+        EventTog = "BẬT Tự động Mua [Shop Sự Kiện]", EventTogD = "Tự động gom đồ Sự kiện đã chọn.",
+        PerkCfg = "Nâng cấp Bổ trợ (Perks)", PerkCfgD = "Tự động nâng cấp các chỉ số cơ bản của bạn.",
+        PerkTarget = "Mục tiêu Nâng cấp", PerkTargetD = "Chỉ số muốn nâng (Máu, Tiền...).",
+        PerkTog = "BẬT Tự động Nâng Bổ trợ", PerkTogD = "Tự động mua khi đủ vàng.",
+        
+        ClaimCfg = "Tự động Nhận thưởng", ClaimCfgD = "Tự động nhận các phần thưởng treo.",
+        ClaimPass = "BẬT Tự động Nhận Battlepass", ClaimPassD = "Nhận thẻ ưu đãi miễn phí.",
+        ClaimMile = "BẬT Tự động Nhận Quà Cấp độ", ClaimMileD = "Nhận quà khi lên cấp.",
+        ClaimIdx = "BẬT Tự động Nhận Quà Bộ Sưu Tập", ClaimIdxD = "Nhận quà từ Index.",
+        CodeCfg = "Tự động Nhập Code", CodeCfgD = "Tự động nhập code cũ và tự động quét update log để tìm code mới.",
+        CodeBtn = "Nhập Tất cả Code", CodeBtnD = "Gửi toàn bộ code vào game.",
+        CodeMsgT = "Đang Nhập Code", CodeMsg = "Đang gửi code tới máy chủ. Vui lòng kiểm tra màn hình game!",
+        
+        AF_StatL = "Trạng thái: ĐANG Ở SẢNH", AF_StatLD = "Hệ thống Master Auto Farm đã sẵn sàng chạy.",
+        AF_StatI = "Trạng thái: ĐANG TRONG TRẬN", AF_StatID = "LƯU Ý: Các chức năng Auto Farm Lobbby sẽ KHÔNG hoạt động khi ở trong trận. Nó sẽ tự tiếp tục khi về Sảnh.",
+        AF_Sess = "Thống kê Cày cuốc (Hôm nay)", AF_SessD = "Số trận đã chơi: 0",
+        AF_Friend = "Chế độ Chỉ Bạn Bè (Friends Only)", AF_FriendD = "Tạo phòng không cho người lạ vào.",
+        AF_Daily = "Tự động Nhận Quà Đăng nhập", AF_DailyD = "Nhận quà điểm danh hàng ngày.",
+        AF_Bun = "Tự động Nhận Quà Miễn phí", AF_BunD = "Nhận gói quà Free trong Shop.",
+        AF_Quest = "Tự động Làm Nhiệm vụ", AF_QuestD = "Tự động nhận và trả nhiệm vụ.",
+        AF_Master = "BẬT MASTER AUTO FARM (TRẠNG THÁI CHÍNH)", AF_MasterD = "Công tắc tổng. Bật cái này thì mọi chuỗi Auto mới bắt đầu chạy.",
+        
+        PriCfg = "Cài đặt Mức độ Ưu tiên", PriCfgD = "Tuỳ chỉnh xem cái nào chạy trước, cái nào chạy sau. Nếu cái số 1 không có gì để làm, nó sẽ làm cái số 2. Nếu xong hết, nó sẽ tự động tạo map đi farm.",
+        Pri1 = "Ưu tiên 1 (Cao nhất)", Pri1D = "Chạy đầu tiên.",
+        Pri2 = "Ưu tiên 2", Pri2D = "Chạy thứ hai.",
+        Pri3 = "Ưu tiên 3", Pri3D = "Chạy thứ ba.",
+        Pri4 = "Ưu tiên 4", Pri4D = "Chạy cuối cùng.",
+        
+        PtCfg = "Hệ thống Tổ đội Tự động", PtCfgD = "Chơi chung với các acc Clone của bạn một cách hoàn toàn tự động.",
+        PtTog = "BẬT Chế độ Tổ đội (Party Mode)", PtTogD = "Kích hoạt hệ thống kéo acc.",
+        PtRole = "Vai trò Tổ đội", PtRoleD = "Host (Chủ phòng): Tạo phòng và kéo đệ. Member (Đệ tử): Tắt mọi Auto, chỉ ngoan ngoãn đi theo Host.",
+        PtSync = "Đồng bộ Rời Trận", PtSyncD = "Nếu 1 acc bị văng hoặc thoát, cả team sẽ tự động thoát theo về sảnh.",
+        PtHostCfg = "Cài đặt Chủ Phòng (Host)", PtHostCfgD = "Nếu bạn là Chủ phòng, ghi chính xác Tên nhân vật (Username) của các đệ tử vào đây để đợi.",
+        PtM1 = "Đợi Đệ tử 1", PtM1D = "Tên nhân vật của Clone 1.",
+        PtM2 = "Đợi Đệ tử 2", PtM2D = "Tên nhân vật của Clone 2.",
+        PtM3 = "Đợi Đệ tử 3", PtM3D = "Tên nhân vật của Clone 3.",
+        PtTime = "Thời gian Đợi (Phút)", PtTimeD = "Nếu quá thời gian này mà đệ tử bị crash chưa vào kịp, Host sẽ tự động kích đệ và vào trận luôn.",
+        PtMemCfg = "Cài đặt Đệ Tử (Member)", PtMemCfgD = "Nếu bạn là Đệ tử, ghi chính xác Tên nhân vật Chủ phòng mà bạn muốn đi theo.",
+        PtHostName = "Tên Chủ Phòng", PtHostNameD = "Tên nhân vật của Acc Chính.",
+        
+        WbCfg = "Thông báo Discord (Webhook)", WbCfgD = "Bot tự động gửi báo cáo cày cuốc.",
+        WbUrl = "Link Webhook", WbUrlD = "Dán link Discord Webhook của bạn vào đây.",
+        WbDrop = "Báo cáo Rớt đồ (Traits/Cubes)", WbDropD = "Gửi thông báo khi bạn nhặt được đồ hiếm.",
+        WbMatch = "Báo cáo Hết Trận (Thắng/Thua)", WbMatchD = "Gửi thống kê sau mỗi ván chơi.",
+        WbInt = "Báo cáo Định kỳ", WbIntD = "Gửi tóm tắt tình trạng cày cuốc theo chu kỳ.",
+        WbEvo = "Báo cáo Tiến hoá/Ghép", WbEvoD = "Gửi thông báo khi Ghép đồ Thành công hay Thất bại.",
+        WbTime = "Chu kỳ Báo cáo (Phút)", WbTimeD = "Cứ sau bao nhiêu phút thì gửi 1 báo cáo tổng hợp.",
+        
+        SetLang = "Language / Ngôn ngữ", SetLangD = "Choose language. Tắt Script đi mở lại để áp dụng / Restart Script to apply!"
+    }
+}
+
+local L = Locales[currentLang]
+
 local Window = Fluent:CreateWindow({
-    Title = "Free HUB",
-    SubTitle = "Anime Squadron",
+    Title = L.WinTitle,
+    SubTitle = L.WinSub,
     TabWidth = 160,
     Size = UDim2.fromOffset(580, 520),
     Acrylic = true,
@@ -174,31 +391,32 @@ local Window = Fluent:CreateWindow({
 })
 
 local Tabs = {
-    AutoFarm = Window:AddTab({ Title = "Auto Farm", Icon = "play" }),
-    EvoCraft = Window:AddTab({ Title = "Evo & Craft", Icon = "hammer" }),
-    AutoReroll = Window:AddTab({ Title = "Auto Reroll", Icon = "dices" }),
-    ShopUpgrade = Window:AddTab({ Title = "Shop & Upgrades", Icon = "shopping-cart" }),
-    Claims = Window:AddTab({ Title = "Claims & Misc", Icon = "gift" }),
-    Sniper = Window:AddTab({ Title = "Challenge Sniper", Icon = "target" }),
-    Maps = Window:AddTab({ Title = "Trait Maps", Icon = "map" }),
-    Ingame = Window:AddTab({ Title = "Ingame Helper", Icon = "swords" }),
-    PartyMulti = Window:AddTab({ Title = "Party & Multi", Icon = "users" }),
-    Priority = Window:AddTab({ Title = "Priority Settings", Icon = "list-ordered" }),
-    Webhook = Window:AddTab({ Title = "Webhook", Icon = "link" }),
-    Settings = Window:AddTab({ Title = "Settings", Icon = "settings" })
+    AutoFarm = Window:AddTab({ Title = L.TabAutoFarm, Icon = "play" }),
+    Priority = Window:AddTab({ Title = L.TabPriority, Icon = "list-ordered" }),
+    Maps = Window:AddTab({ Title = L.TabMaps, Icon = "map" }),
+    EvoCraft = Window:AddTab({ Title = L.TabEvo, Icon = "hammer" }),
+    AutoReroll = Window:AddTab({ Title = L.TabReroll, Icon = "dices" }),
+    ShopUpgrade = Window:AddTab({ Title = L.TabShop, Icon = "shopping-cart" }),
+    Claims = Window:AddTab({ Title = L.TabClaims, Icon = "gift" }),
+    Sniper = Window:AddTab({ Title = L.TabSniper, Icon = "target" }),
+    Ingame = Window:AddTab({ Title = L.TabIngame, Icon = "swords" }),
+    PartyMulti = Window:AddTab({ Title = L.TabParty, Icon = "users" }),
+    Webhook = Window:AddTab({ Title = L.TabWebhook, Icon = "link" }),
+    Settings = Window:AddTab({ Title = L.TabSettings, Icon = "settings" })
 }
 
 local Options = Fluent.Options
 
 local itemsList = {"Trait Shards", "Reroll Cubes", "Perfect Cubes", "Gems", "Gold"}
 
-Tabs.Sniper:AddParagraph({ Title = "Sniper Configuration", Content = "Used in Lobby. Checked with highest priority." })
+Tabs.Sniper:AddParagraph({ Title = L.SniperCfg, Content = L.SniperCfgD })
 
-local Toggle1d = Tabs.Sniper:AddToggle("AutoJoin1d", { Title = "Enable Daily Challenge (1d)", Default = false })
-local Toggle30m = Tabs.Sniper:AddToggle("AutoJoin30m", { Title = "Enable Regular Challenge (30m)", Default = false })
+local Toggle1d = Tabs.Sniper:AddToggle("AutoJoin1d", { Title = L.Snip1d, Description = L.Snip1dD, Default = false })
+local Toggle30m = Tabs.Sniper:AddToggle("AutoJoin30m", { Title = L.Snip30m, Description = L.Snip30mD, Default = false })
 
 local itemDropdown = Tabs.Sniper:AddDropdown("TargetItem30m", {
-    Title = "Target Items (Regular 30m)",
+    Title = L.SnipTarget,
+    Description = L.SnipTargetD,
     Values = itemsList,
     Multi = true,
     Default = {},
@@ -244,26 +462,28 @@ if isLobby then
 end
 
 local mapConfigs = {}
-Tabs.Maps:AddParagraph({ Title = "Configuration Guide", Content = "Enter 'Priority' (lower number = higher priority). Enter 0 to skip." })
+Tabs.Maps:AddParagraph({ Title = L.MapCfg, Content = L.MapCfgD })
 
 if #traitMaps == 0 then
-    Tabs.Maps:AddParagraph({ Title = "No Data Found", Content = "Execute this script in the Lobby at least once to cache Map data!" })
+    Tabs.Maps:AddParagraph({ Title = L.MapNoData, Content = L.MapNoDataD })
 else
     for i, map in ipairs(traitMaps) do
         local capStr = get_cap_string(map.mode, map.world, map.act, "Trait Shards")
         local titleStr = string.format("[%s] %s (Act %d)", map.mode, map.world, map.act)
         
-        local paragraph = Tabs.Maps:AddParagraph({ Title = titleStr, Content = "Tracking current limit." })
+        local paragraph = Tabs.Maps:AddParagraph({ Title = titleStr, Content = L.MapTrack })
         
         local input = Tabs.Maps:AddInput("Priority_"..i, {
-            Title = "Priority (0 = Skip)",
+            Title = L.MapPriority,
+            Description = L.MapPriorityD,
             Default = tostring(i),
             Numeric = true,
             Finished = false,
         })
         
         local diff = Tabs.Maps:AddDropdown("Diff_"..i, {
-            Title = "Difficulty",
+            Title = L.MapDiff,
+            Description = L.MapDiffD,
             Values = {"Normal", "Hard"},
             Multi = false,
             Default = 1,
@@ -277,25 +497,26 @@ else
     end
 end
 
-Tabs.Ingame:AddParagraph({ Title = "Ingame Utilities", Content = "Only active during a match." })
-local ToggleAutoPlay = Tabs.Ingame:AddToggle("AutoPlayToggle", { Title = "ENABLE Official Auto Play", Default = false })
-local ToggleLeave = Tabs.Ingame:AddToggle("AutoLeaveToggle", { Title = "ENABLE Auto Leave (On Max Limit/Cant Replay)", Default = false })
-local ToggleLeaveBase = Tabs.Ingame:AddToggle("AutoLeaveBaseFailsafe", { Title = "ENABLE Auto Leave (Base 0 HP Failsafe)", Default = false })
-local ToggleReplay = Tabs.Ingame:AddToggle("AutoReplayToggle", { Title = "ENABLE Auto Replay", Default = false })
-local ToggleReplayAtWave = Tabs.Ingame:AddToggle("AutoReplayAtWave", { Title = "ENABLE Auto Replay at Wave (Inf Mode)", Default = false })
-local InputReplayWave = Tabs.Ingame:AddInput("ReplayWaveTarget", { Title = "Target Wave to Replay", Default = "30", Numeric = true, Finished = false })
-local ToggleSpeed = Tabs.Ingame:AddToggle("AutoSpeedToggle", { Title = "ENABLE Auto Speed (Max 2x/3x)", Default = false })
-local ToggleUltimate = Tabs.Ingame:AddToggle("AutoUltimateToggle", { Title = "ENABLE Auto Ultimate (Only when Enemies present)", Default = false })
+Tabs.Ingame:AddParagraph({ Title = L.IgUtil, Content = L.IgUtilD })
+local ToggleAutoPlay = Tabs.Ingame:AddToggle("AutoPlayToggle", { Title = L.IgAutoPlay, Description = L.IgAutoPlayD, Default = false })
+local ToggleLeave = Tabs.Ingame:AddToggle("AutoLeaveToggle", { Title = L.IgAutoLeave, Description = L.IgAutoLeaveD, Default = false })
+local ToggleLeaveBase = Tabs.Ingame:AddToggle("AutoLeaveBaseFailsafe", { Title = L.IgAutoLeaveBase, Description = L.IgAutoLeaveBaseD, Default = false })
+local ToggleReplay = Tabs.Ingame:AddToggle("AutoReplayToggle", { Title = L.IgAutoReplay, Description = L.IgAutoReplayD, Default = false })
+local ToggleReplayAtWave = Tabs.Ingame:AddToggle("AutoReplayAtWave", { Title = L.IgReplayInf, Description = L.IgReplayInfD, Default = false })
+local InputReplayWave = Tabs.Ingame:AddInput("ReplayWaveTarget", { Title = L.IgWaveTarget, Description = L.IgWaveTargetD, Default = "30", Numeric = true, Finished = false })
+local ToggleSpeed = Tabs.Ingame:AddToggle("AutoSpeedToggle", { Title = L.IgSpeed, Description = L.IgSpeedD, Default = false })
+local ToggleUltimate = Tabs.Ingame:AddToggle("AutoUltimateToggle", { Title = L.IgUlt, Description = L.IgUltD, Default = false })
 
-Tabs.Ingame:AddParagraph({ Title = "Challenge Sniper Sync", Content = "Automatically return to lobby around XX:00 and XX:30 to check new challenges." })
-local ToggleSniperSync = Tabs.Ingame:AddToggle("AutoSniperSync", { Title = "ENABLE Sniper Sync", Default = false })
+Tabs.Ingame:AddParagraph({ Title = L.IgSniper, Content = L.IgSniperD })
+local ToggleSniperSync = Tabs.Ingame:AddToggle("AutoSniperSync", { Title = L.IgSniperTog, Description = L.IgSniperTogD, Default = false })
 local DropdownSniperSyncMode = Tabs.Ingame:AddDropdown("SniperSyncMode", {
-    Title = "Sync Mode",
+    Title = L.IgSniperMode,
+    Description = L.IgSniperModeD,
     Values = {"Safe (At EndScreen)", "Instant (Abort Match)"},
     Multi = false,
     Default = 1,
 })
-Tabs.EvoCraft:AddParagraph({ Title = "Evo & Craft Priority", Content = "Runs in the Lobby. Lower priority than Auto Quest. Evo and Craft will NOT run simultaneously." })
+Tabs.EvoCraft:AddParagraph({ Title = L.EvoPri, Content = L.EvoPriD })
 
 local function getSavedTarget(key, defaultVal)
     local saved = defaultVal
@@ -310,7 +531,7 @@ local function getSavedTarget(key, defaultVal)
 end
 
 local initEvo = getSavedTarget("EvoTarget", "(Waiting for Inventory...)")
-local DropdownEvoTarget = Tabs.EvoCraft:AddDropdown("EvoTarget", { Title = "Evo Target", Values = {initEvo}, Multi = false, Default = 1 })
+local DropdownEvoTarget = Tabs.EvoCraft:AddDropdown("EvoTarget", { Title = L.EvoTarget, Description = L.EvoTargetD, Values = {initEvo}, Multi = false, Default = 1 })
 
 if isLobby then
     task.spawn(function()
@@ -338,12 +559,12 @@ if isLobby then
         end
     end)
 end
-local ToggleAutoEvo = Tabs.EvoCraft:AddToggle("AutoEvo", { Title = "ENABLE Auto Evo", Default = false })
+local ToggleAutoEvo = Tabs.EvoCraft:AddToggle("AutoEvo", { Title = L.EvoToggle, Description = L.EvoToggleD, Default = false })
 
 Tabs.EvoCraft:AddParagraph({ Title = "---", Content = "" })
 
 local initCraft = getSavedTarget("CraftTarget", "(Loading Craftables...)")
-local DropdownCraftTarget = Tabs.EvoCraft:AddDropdown("CraftTarget", { Title = "Craft Target", Values = {initCraft}, Multi = false, Default = 1 })
+local DropdownCraftTarget = Tabs.EvoCraft:AddDropdown("CraftTarget", { Title = L.CraftTarget, Description = L.CraftTargetD, Values = {initCraft}, Multi = false, Default = 1 })
 
 task.spawn(function()
     local craftTargets = {}
@@ -365,7 +586,7 @@ task.spawn(function()
     DropdownCraftTarget:SetValues(craftTargets)
     if currentCraft then DropdownCraftTarget:SetValue(currentCraft) end
 end)
-local InputCraftQty = Tabs.EvoCraft:AddInput("CraftQty", { Title = "Quantity to Craft", Default = "1", Numeric = true, Finished = false })
+local InputCraftQty = Tabs.EvoCraft:AddInput("CraftQty", { Title = L.CraftQty, Description = L.CraftQtyD, Default = "1", Numeric = true, Finished = false })
 
 _G.AnimeSquadron_CraftQueue = {}
 if isfile and readfile and isfile(basePath .. "/CraftQueue.json") then
@@ -379,10 +600,10 @@ end
 
 _G.AnimeSquadron_UpdateCraftQueueUI = function() end
 
-local CraftQueuePara = Tabs.EvoCraft:AddParagraph({ Title = "Crafting Queue", Content = "Empty" })
+local CraftQueuePara = Tabs.EvoCraft:AddParagraph({ Title = L.CraftQueue, Content = L.CraftQueueD })
 _G.AnimeSquadron_UpdateCraftQueueUI = function()
     if #_G.AnimeSquadron_CraftQueue == 0 then
-        CraftQueuePara:SetDesc("Empty")
+        CraftQueuePara:SetDesc(L.CraftQueueD)
     else
         local lines = {}
         for i, task in ipairs(_G.AnimeSquadron_CraftQueue) do
@@ -397,8 +618,8 @@ end
 _G.AnimeSquadron_UpdateCraftQueueUI()
 
 Tabs.EvoCraft:AddButton({
-    Title = "Add to Queue",
-    Description = "Add currently selected item and quantity to queue.",
+    Title = L.CraftAdd,
+    Description = L.CraftAddD,
     Callback = function()
         local t = Options.CraftTarget.Value
         local q = tonumber(Options.CraftQty.Value) or 1
@@ -421,8 +642,8 @@ Tabs.EvoCraft:AddButton({
 })
 
 Tabs.EvoCraft:AddButton({
-    Title = "Clear Queue",
-    Description = "Remove all items from queue.",
+    Title = L.CraftClear,
+    Description = L.CraftClearD,
     Callback = function()
         _G.AnimeSquadron_CraftQueue = {}
         _G.AnimeSquadron_UpdateCraftQueueUI()
@@ -430,10 +651,10 @@ Tabs.EvoCraft:AddButton({
     end
 })
 
-local ToggleAutoCraft = Tabs.EvoCraft:AddToggle("AutoCraft", { Title = "ENABLE Auto Craft", Default = false })
-Tabs.AutoReroll:AddParagraph({ Title = "Auto Stat Reroll", Content = "Select a unit. It will automatically lock the specified stats and reroll when Potential reaches 100%." })
+local ToggleAutoCraft = Tabs.EvoCraft:AddToggle("AutoCraft", { Title = L.CraftToggle, Description = L.CraftToggleD, Default = false })
+Tabs.AutoReroll:AddParagraph({ Title = L.RerollCfg, Content = L.RerollCfgD })
 
-local DropdownRerollUnit = Tabs.AutoReroll:AddDropdown("RerollUnit", { Title = "Select Unit", Values = {"(Loading...)"}, Multi = false, Default = 1 })
+local DropdownRerollUnit = Tabs.AutoReroll:AddDropdown("RerollUnit", { Title = L.RerollUnit, Description = L.RerollUnitD, Values = {"(Loading...)"}, Multi = false, Default = 1 })
 
 task.spawn(function()
     local util
@@ -465,12 +686,12 @@ task.spawn(function()
     end
 end)
 
-local DropdownLockedStats = Tabs.AutoReroll:AddDropdown("LockedStats", { Title = "Stats to Lock", Values = {"SSS", "SS", "S+", "S", "A+", "A", "B+", "B", "C+", "C", "C-"}, Multi = true, Default = {["SSS"] = true} })
+local DropdownLockedStats = Tabs.AutoReroll:AddDropdown("LockedStats", { Title = L.RerollLock, Description = L.RerollLockD, Values = {"SSS", "SS", "S+", "S", "A+", "A", "B+", "B", "C+", "C", "C-"}, Multi = true, Default = {["SSS"] = true} })
 
-local ToggleAutoReroll = Tabs.AutoReroll:AddToggle("AutoReroll", { Title = "ENABLE Auto Reroll (100% Potential)", Default = false })
-Tabs.ShopUpgrade:AddParagraph({ Title = "Dynamic Shops", Content = "Merchant lists all possible items. Raid/Event refresh automatically." })
+local ToggleAutoReroll = Tabs.AutoReroll:AddToggle("AutoReroll", { Title = L.RerollTog, Description = L.RerollTogD, Default = false })
+Tabs.ShopUpgrade:AddParagraph({ Title = L.ShopDyn, Content = L.ShopDynD })
 
-local DropdownMerchantItem = Tabs.ShopUpgrade:AddDropdown("MerchantItem", { Title = "[Merchant] Target Item", Values = {"(Loading Items...)"}, Multi = true, Default = {} })
+local DropdownMerchantItem = Tabs.ShopUpgrade:AddDropdown("MerchantItem", { Title = L.MerchItem, Description = L.MerchItemD, Values = {"(Loading Items...)"}, Multi = true, Default = {} })
 
 task.spawn(function()
     local allMerchantItems = {}
@@ -513,13 +734,13 @@ task.spawn(function()
     DropdownMerchantItem:SetValues(allMerchantItems)
     if type(currentMerchant) == "table" then DropdownMerchantItem:SetValue(currentMerchant) end
 end)
-local ToggleAutoBuyMerchant = Tabs.ShopUpgrade:AddToggle("AutoBuyMerchant", { Title = "ENABLE Auto Buy [Merchant]", Default = false })
+local ToggleAutoBuyMerchant = Tabs.ShopUpgrade:AddToggle("AutoBuyMerchant", { Title = L.MerchTog, Description = L.MerchTogD, Default = false })
 
-local DropdownRaidShopItem = Tabs.ShopUpgrade:AddDropdown("RaidShopItems", { Title = "[Raid] Target Item", Values = {"(Waiting...)"}, Multi = true, Default = {} })
-local ToggleAutoBuyRaid = Tabs.ShopUpgrade:AddToggle("AutoBuyRaid", { Title = "ENABLE Auto Buy [Raid Shop]", Default = false })
+local DropdownRaidShopItem = Tabs.ShopUpgrade:AddDropdown("RaidShopItems", { Title = L.RaidItem, Description = L.RaidItemD, Values = {"(Waiting...)"}, Multi = true, Default = {} })
+local ToggleAutoBuyRaid = Tabs.ShopUpgrade:AddToggle("AutoBuyRaid", { Title = L.RaidTog, Description = L.RaidTogD, Default = false })
 
-local DropdownEventShopItem = Tabs.ShopUpgrade:AddDropdown("EventShopItems", { Title = "[Event] Target Item", Values = {"(Waiting...)"}, Multi = true, Default = {} })
-local ToggleAutoBuyEvent = Tabs.ShopUpgrade:AddToggle("AutoBuyEvent", { Title = "ENABLE Auto Buy [Event Shop]", Default = false })
+local DropdownEventShopItem = Tabs.ShopUpgrade:AddDropdown("EventShopItems", { Title = L.EventItem, Description = L.EventItemD, Values = {"(Waiting...)"}, Multi = true, Default = {} })
+local ToggleAutoBuyEvent = Tabs.ShopUpgrade:AddToggle("AutoBuyEvent", { Title = L.EventTog, Description = L.EventTogD, Default = false })
 
 if isLobby then
     _G.AnimeSquadronShopLoop = (_G.AnimeSquadronShopLoop or 0) + 1
@@ -550,22 +771,22 @@ if isLobby then
     end)
 end
 
-Tabs.ShopUpgrade:AddParagraph({ Title = "Perks Upgrades", Content = "Auto upgrade your base stats." })
-local DropdownPerkTarget = Tabs.ShopUpgrade:AddDropdown("PerkTarget", { Title = "Perk Target", Values = {"health", "yen_generation", "yen_max"}, Multi = false, Default = 1 })
-local ToggleAutoPerk = Tabs.ShopUpgrade:AddToggle("AutoPerk", { Title = "ENABLE Auto Perk Upgrade", Default = false })
-Tabs.Claims:AddParagraph({ Title = "Auto Claims", Content = "Automatically claims passive rewards." })
-local ToggleAutoPass = Tabs.Claims:AddToggle("AutoPass", { Title = "ENABLE Auto Battlepass", Default = false })
-local ToggleAutoMilestones = Tabs.Claims:AddToggle("AutoMilestones", { Title = "ENABLE Auto Level Milestones", Default = false })
-local ToggleAutoDiscovery = Tabs.Claims:AddToggle("AutoDiscovery", { Title = "ENABLE Auto Discovery Index", Default = false })
+Tabs.ShopUpgrade:AddParagraph({ Title = L.PerkCfg, Content = L.PerkCfgD })
+local DropdownPerkTarget = Tabs.ShopUpgrade:AddDropdown("PerkTarget", { Title = L.PerkTarget, Description = L.PerkTargetD, Values = {"health", "yen_generation", "yen_max"}, Multi = false, Default = 1 })
+local ToggleAutoPerk = Tabs.ShopUpgrade:AddToggle("AutoPerk", { Title = L.PerkTog, Description = L.PerkTogD, Default = false })
+Tabs.Claims:AddParagraph({ Title = L.ClaimCfg, Content = L.ClaimCfgD })
+local ToggleAutoPass = Tabs.Claims:AddToggle("AutoPass", { Title = L.ClaimPass, Description = L.ClaimPassD, Default = false })
+local ToggleAutoMilestones = Tabs.Claims:AddToggle("AutoMilestones", { Title = L.ClaimMile, Description = L.ClaimMileD, Default = false })
+local ToggleAutoDiscovery = Tabs.Claims:AddToggle("AutoDiscovery", { Title = L.ClaimIdx, Description = L.ClaimIdxD, Default = false })
 
-Tabs.Claims:AddParagraph({ Title = "Code Redeemer", Content = "Auto redeem predefined codes and dynamically scan Update Log." })
+Tabs.Claims:AddParagraph({ Title = L.CodeCfg, Content = L.CodeCfgD })
 Tabs.Claims:AddButton({
-    Title = "Redeem All Codes",
-    Description = "Sends all known codes to the server.",
+    Title = L.CodeBtn,
+    Description = L.CodeBtnD,
     Callback = function()
         Window:Dialog({
-            Title = "Redeeming Codes",
-            Content = "Sending codes to server. Check game UI for rewards!",
+            Title = L.CodeMsgT,
+            Content = L.CodeMsg,
             Buttons = { { Title = "OK", Callback = function() end } }
         })
         task.spawn(function()
@@ -606,9 +827,9 @@ Tabs.Claims:AddButton({
 local sendWebhookData
 local StatusParagraph
 if isLobby then
-    StatusParagraph = Tabs.AutoFarm:AddParagraph({ Title = "Status: LOBBY", Content = "Master Auto Farm system is ready." })
+    StatusParagraph = Tabs.AutoFarm:AddParagraph({ Title = L.AF_StatL, Content = L.AF_StatLD })
 else
-    StatusParagraph = Tabs.AutoFarm:AddParagraph({ Title = "Status: INGAME", Content = "NOTE: Auto Farm functions will NOT operate while in-game. It will resume automatically in the Lobby." })
+    StatusParagraph = Tabs.AutoFarm:AddParagraph({ Title = L.AF_StatI, Content = L.AF_StatID })
 end
 
 local SessionStats = {
@@ -619,8 +840,8 @@ local SessionStats = {
 }
 
 local StatsParagraph = Tabs.AutoFarm:AddParagraph({
-    Title = "Session Stats (Farmed Today)",
-    Content = "Matches Played: 0\nTrait Shards: 0 + 0\nPerfect Cubes: 0 + 0\nReroll Cubes: 0 + 0"
+    Title = L.AF_Sess,
+    Content = L.AF_SessD
 })
 
 local function saveSessionStats()
@@ -639,8 +860,16 @@ local function updateStatsUI()
         local p_current = p_base + SessionStats.PerfectCubes
         local r_current = r_base + SessionStats.RerollCubes
         
-        StatsParagraph:SetDesc(string.format("Matches Played: %d\nTrait Shards: +%d (Current: %d)\nPerfect Cubes: +%d (Current: %d)\nReroll Cubes: +%d (Current: %d)", 
-            SessionStats.Matches, SessionStats.TraitShards, t_current, SessionStats.PerfectCubes, p_current, SessionStats.RerollCubes, r_current))
+        local matchesStr = currentLang == "VN" and "Số trận đã chơi: " or "Matches Played: "
+        local shardsStr = currentLang == "VN" and "Trait Shards: +" or "Trait Shards: +"
+        local pCubesStr = currentLang == "VN" and "Perfect Cubes: +" or "Perfect Cubes: +"
+        local rCubesStr = currentLang == "VN" and "Reroll Cubes: +" or "Reroll Cubes: +"
+        
+        StatsParagraph:SetDesc(string.format("%s%d\n%s%d (Current: %d)\n%s%d (Current: %d)\n%s%d (Current: %d)", 
+            matchesStr, SessionStats.Matches, 
+            shardsStr, SessionStats.TraitShards, t_current, 
+            pCubesStr, SessionStats.PerfectCubes, p_current, 
+            rCubesStr, SessionStats.RerollCubes, r_current))
     end
 end
 
@@ -677,11 +906,11 @@ local function loadSessionStats()
     end
 end
 loadSessionStats()
-local friendToggle = Tabs.AutoFarm:AddToggle("FriendsOnly", { Title = "Friends Only", Default = true })
-local AutoClaimDaily = Tabs.AutoFarm:AddToggle("AutoClaimDaily", { Title = "Auto Claim Daily Rewards", Default = false })
-local AutoClaimBundle = Tabs.AutoFarm:AddToggle("AutoClaimBundle", { Title = "Auto Claim Free Bundle", Default = false })
-local AutoQuest = Tabs.AutoFarm:AddToggle("AutoQuest", { Title = "Auto Quest", Default = false })
-local AutoToggle = Tabs.AutoFarm:AddToggle("MasterAutoRun", { Title = "ENABLE MASTER AUTO FARM", Default = false })
+local friendToggle = Tabs.AutoFarm:AddToggle("FriendsOnly", { Title = L.AF_Friend, Description = L.AF_FriendD, Default = true })
+local AutoClaimDaily = Tabs.AutoFarm:AddToggle("AutoClaimDaily", { Title = L.AF_Daily, Description = L.AF_DailyD, Default = false })
+local AutoClaimBundle = Tabs.AutoFarm:AddToggle("AutoClaimBundle", { Title = L.AF_Bun, Description = L.AF_BunD, Default = false })
+local AutoQuest = Tabs.AutoFarm:AddToggle("AutoQuest", { Title = L.AF_Quest, Description = L.AF_QuestD, Default = false })
+local AutoToggle = Tabs.AutoFarm:AddToggle("MasterAutoRun", { Title = L.AF_Master, Description = L.AF_MasterD, Default = false })
 game:GetService("GuiService").ErrorMessageChanged:Connect(function(errMessage)
     if errMessage and errMessage ~= "" then
         Fluent:Notify({ Title = "Connection Lost", Content = "Auto reconnecting in 5 seconds...", Duration = 5 })
@@ -690,26 +919,26 @@ game:GetService("GuiService").ErrorMessageChanged:Connect(function(errMessage)
     end
 end)
 
-Tabs.Priority:AddParagraph({ Title = "Task Priority", Content = "Configure which auto farm tasks have priority over others. If a task has no work to do, it will fallback to the next priority. If all tasks are done, it defaults to Auto Farm Map." })
+Tabs.Priority:AddParagraph({ Title = L.PriCfg, Content = L.PriCfgD })
 local PriorityList = {"Auto Quest", "Auto Craft", "Auto Evo", "Auto Reroll", "None"}
-Tabs.Priority:AddDropdown("Priority1", { Title = "Priority 1 (Highest)", Values = PriorityList, Multi = false, Default = "Auto Quest" })
-Tabs.Priority:AddDropdown("Priority2", { Title = "Priority 2", Values = PriorityList, Multi = false, Default = "Auto Craft" })
-Tabs.Priority:AddDropdown("Priority3", { Title = "Priority 3", Values = PriorityList, Multi = false, Default = "Auto Evo" })
-Tabs.Priority:AddDropdown("Priority4", { Title = "Priority 4", Values = PriorityList, Multi = false, Default = "Auto Reroll" })
+Tabs.Priority:AddDropdown("Priority1", { Title = L.Pri1, Description = L.Pri1D, Values = PriorityList, Multi = false, Default = "Auto Quest" })
+Tabs.Priority:AddDropdown("Priority2", { Title = L.Pri2, Description = L.Pri2D, Values = PriorityList, Multi = false, Default = "Auto Craft" })
+Tabs.Priority:AddDropdown("Priority3", { Title = L.Pri3, Description = L.Pri3D, Values = PriorityList, Multi = false, Default = "Auto Evo" })
+Tabs.Priority:AddDropdown("Priority4", { Title = L.Pri4, Description = L.Pri4D, Values = PriorityList, Multi = false, Default = "Auto Reroll" })
 
-Tabs.PartyMulti:AddParagraph({ Title = "Auto Party System", Content = "Play with your alt accounts automatically." })
-local TogglePartyMode = Tabs.PartyMulti:AddToggle("PartyMode", { Title = "ENABLE Party Mode", Default = false })
-local DropdownPartyRole = Tabs.PartyMulti:AddDropdown("PartyRole", { Title = "Party Role", Values = {"Host", "Member"}, Multi = false, Default = "Host" })
-local TogglePartyLeaveSync = Tabs.PartyMulti:AddToggle("PartyLeaveSync", { Title = "Sync Leave (Return to Lobby if ANY player leaves)", Default = true })
+Tabs.PartyMulti:AddParagraph({ Title = L.PtCfg, Content = L.PtCfgD })
+local TogglePartyMode = Tabs.PartyMulti:AddToggle("PartyMode", { Title = L.PtTog, Description = L.PtTogD, Default = false })
+local DropdownPartyRole = Tabs.PartyMulti:AddDropdown("PartyRole", { Title = L.PtRole, Description = L.PtRoleD, Values = {"Host", "Member"}, Multi = false, Default = "Host" })
+local TogglePartyLeaveSync = Tabs.PartyMulti:AddToggle("PartyLeaveSync", { Title = L.PtSync, Description = L.PtSyncD, Default = true })
 
-Tabs.PartyMulti:AddParagraph({ Title = "Host Settings", Content = "If you are Host, specify EXACT usernames of members to wait for." })
-local InputMember1 = Tabs.PartyMulti:AddInput("PartyMember1", { Title = "Wait for Member 1", Default = "", Numeric = false, Finished = false })
-local InputMember2 = Tabs.PartyMulti:AddInput("PartyMember2", { Title = "Wait for Member 2", Default = "", Numeric = false, Finished = false })
-local InputMember3 = Tabs.PartyMulti:AddInput("PartyMember3", { Title = "Wait for Member 3", Default = "", Numeric = false, Finished = false })
-local SliderHostTimeout = Tabs.PartyMulti:AddSlider("HostWaitTimeout", { Title = "Host Wait Timeout (Minutes)", Description = "Start without them if they take too long", Default = 5, Min = 1, Max = 10, Rounding = 0 })
+Tabs.PartyMulti:AddParagraph({ Title = L.PtHostCfg, Content = L.PtHostCfgD })
+local InputMember1 = Tabs.PartyMulti:AddInput("PartyMember1", { Title = L.PtM1, Description = L.PtM1D, Default = "", Numeric = false, Finished = false })
+local InputMember2 = Tabs.PartyMulti:AddInput("PartyMember2", { Title = L.PtM2, Description = L.PtM2D, Default = "", Numeric = false, Finished = false })
+local InputMember3 = Tabs.PartyMulti:AddInput("PartyMember3", { Title = L.PtM3, Description = L.PtM3D, Default = "", Numeric = false, Finished = false })
+local SliderHostTimeout = Tabs.PartyMulti:AddSlider("HostWaitTimeout", { Title = L.PtTime, Description = L.PtTimeD, Default = 5, Min = 1, Max = 10, Rounding = 0 })
 
-Tabs.PartyMulti:AddParagraph({ Title = "Member Settings", Content = "If you are a Member, specify the EXACT username of the Host you want to follow." })
-local InputHostName = Tabs.PartyMulti:AddInput("PartyHostName", { Title = "Host Username", Default = "", Numeric = false, Finished = false })
+Tabs.PartyMulti:AddParagraph({ Title = L.PtMemCfg, Content = L.PtMemCfgD })
+local InputHostName = Tabs.PartyMulti:AddInput("PartyHostName", { Title = L.PtHostName, Description = L.PtHostNameD, Default = "", Numeric = false, Finished = false })
 _G.AnimeSquadron_UserCache = _G.AnimeSquadron_UserCache or {}
 local function resolveUsernameToID(username)
     if not username or username == "" then return nil end
@@ -755,18 +984,37 @@ local function resolveUsernameToID(username)
     return nil
 end
 
-Tabs.Webhook:AddParagraph({ Title = "Discord Webhook", Content = "Automatic status reporter" })
-local WebhookURL = Tabs.Webhook:AddInput("WebhookURL", { Title = "Webhook URL", Default = "", Numeric = false, Finished = false, Placeholder = "https://discord.com/api/webhooks/..." })
-local WebhookOnDrop = Tabs.Webhook:AddToggle("WebhookOnDrop", { Title = "Send on Item Drop (Traits/Cubes)", Default = false })
-local WebhookOnMatchEnd = Tabs.Webhook:AddToggle("WebhookOnMatchEnd", { Title = "Send on Match End (Win/Loss)", Default = false })
-local WebhookOnInterval = Tabs.Webhook:AddToggle("WebhookOnInterval", { Title = "Send on Interval", Default = false })
-local WebhookOnEvoCraft = Tabs.Webhook:AddToggle("WebhookOnEvoCraft", { Title = "Send on Evo/Craft (Success/Fail)", Default = false })
-local WebhookInterval = Tabs.Webhook:AddSlider("WebhookInterval", { Title = "Interval (Minutes)", Description = "How often to send", Default = 10, Min = 1, Max = 60, Rounding = 0 })
+Tabs.Webhook:AddParagraph({ Title = L.WbCfg, Content = L.WbCfgD })
+local WebhookURL = Tabs.Webhook:AddInput("WebhookURL", { Title = L.WbUrl, Description = L.WbUrlD, Default = "", Numeric = false, Finished = false, Placeholder = "https://discord.com/api/webhooks/..." })
+local WebhookOnDrop = Tabs.Webhook:AddToggle("WebhookOnDrop", { Title = L.WbDrop, Description = L.WbDropD, Default = false })
+local WebhookOnMatchEnd = Tabs.Webhook:AddToggle("WebhookOnMatchEnd", { Title = L.WbMatch, Description = L.WbMatchD, Default = false })
+local WebhookOnInterval = Tabs.Webhook:AddToggle("WebhookOnInterval", { Title = L.WbInt, Description = L.WbIntD, Default = false })
+local WebhookOnEvoCraft = Tabs.Webhook:AddToggle("WebhookOnEvoCraft", { Title = L.WbEvo, Description = L.WbEvoD, Default = false })
+local WebhookInterval = Tabs.Webhook:AddSlider("WebhookInterval", { Title = L.WbTime, Description = L.WbTimeD, Default = 10, Min = 1, Max = 60, Rounding = 0 })
+
+local DropLang = Tabs.Settings:AddDropdown("ScriptLanguage", {
+    Title = L.SetLang,
+    Description = L.SetLangD,
+    Values = {"EN", "VN"},
+    Multi = false,
+    Default = currentLang
+})
+DropLang:OnChanged(function(Value)
+    if isfile and writefile and isfolder then
+        pcall(function()
+            if not isfolder("as_free") then makefolder("as_free") end
+            writefile("as_free/Language.txt", Value)
+        end)
+    end
+    if Value ~= currentLang then
+        Fluent:Notify({ Title = "Language Changed", Content = "Please RE-EXECUTE the script to apply!", Duration = 5 })
+    end
+end)
 
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
 SaveManager:IgnoreThemeSettings()
-SaveManager:SetIgnoreIndexes({})
+SaveManager:SetIgnoreIndexes({"ScriptLanguage"})
 InterfaceManager:SetFolder(basePath)
 SaveManager:SetFolder(basePath .. "/AutoFarm")
 
@@ -777,6 +1025,7 @@ Window:SelectTab(1)
 
 pcall(function()
     SaveManager:Load("AutoSave")
+
 end)
 
 local saveDebounce = false
@@ -2127,5 +2376,6 @@ local function createMobileToggle()
     end)
 end
 createMobileToggle()
+
 
 
