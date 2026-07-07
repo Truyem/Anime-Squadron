@@ -172,46 +172,94 @@ local isfolder = isfolder or function() return false end
 if not isfolder("as_free") then pcall(function() makefolder("as_free") end) end
 
 if not isfile("as_free/Language.txt") then
-    local SetupWindow = Fluent:CreateWindow({
-        Title = "Language Setup",
-        SubTitle = "Anime Squadron",
-        TabWidth = 160,
-        Size = UDim2.fromOffset(400, 320),
-        Acrylic = true,
-        Theme = "Dark",
-        MinimizeKey = Enum.KeyCode.LeftControl
-    })
+    local CoreGui = game:GetService("CoreGui")
+    local sg = Instance.new("ScreenGui")
+    sg.Name = "LanguageSetupGUI"
+    sg.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+    
+    local protect = syn and syn.protect_gui or protectgui
+    if protect then pcall(function() protect(sg) end) end
+    pcall(function() sg.Parent = CoreGui end)
+    
+    local frame = Instance.new("Frame")
+    frame.Size = UDim2.fromOffset(350, 200)
+    frame.Position = UDim2.fromScale(0.5, 0.5)
+    frame.AnchorPoint = Vector2.new(0.5, 0.5)
+    frame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+    frame.BorderSizePixel = 0
+    frame.Parent = sg
+    
+    local uiCorner = Instance.new("UICorner")
+    uiCorner.CornerRadius = UDim.new(0, 8)
+    uiCorner.Parent = frame
+    
+    local title = Instance.new("TextLabel")
+    title.Size = UDim2.new(1, 0, 0, 40)
+    title.BackgroundTransparency = 1
+    title.Text = "Select Language / Chọn Ngôn Ngữ"
+    title.TextColor3 = Color3.fromRGB(255, 255, 255)
+    title.Font = Enum.Font.GothamBold
+    title.TextSize = 18
+    title.Parent = frame
+    
+    local desc = Instance.new("TextLabel")
+    desc.Size = UDim2.new(1, -40, 0, 60)
+    desc.Position = UDim2.new(0, 20, 0, 45)
+    desc.BackgroundTransparency = 1
+    desc.Text = "Please select your preferred language.\nVui lòng chọn ngôn ngữ của bạn."
+    desc.TextColor3 = Color3.fromRGB(200, 200, 200)
+    desc.Font = Enum.Font.Gotham
+    desc.TextSize = 14
+    desc.TextWrapped = true
+    desc.Parent = frame
+    
+    local btnEn = Instance.new("TextButton")
+    btnEn.Size = UDim2.new(0, 120, 0, 40)
+    btnEn.Position = UDim2.new(0, 40, 1, -60)
+    btnEn.BackgroundColor3 = Color3.fromRGB(50, 100, 255)
+    btnEn.Text = "English"
+    btnEn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btnEn.Font = Enum.Font.GothamBold
+    btnEn.TextSize = 14
+    btnEn.Parent = frame
+    
+    local uc1 = Instance.new("UICorner")
+    uc1.CornerRadius = UDim.new(0, 6)
+    uc1.Parent = btnEn
+    
+    local btnVn = Instance.new("TextButton")
+    btnVn.Size = UDim2.new(0, 120, 0, 40)
+    btnVn.Position = UDim2.new(1, -160, 1, -60)
+    btnVn.BackgroundColor3 = Color3.fromRGB(50, 100, 255)
+    btnVn.Text = "Tiếng Việt"
+    btnVn.TextColor3 = Color3.fromRGB(255, 255, 255)
+    btnVn.Font = Enum.Font.GothamBold
+    btnVn.TextSize = 14
+    btnVn.Parent = frame
+    
+    local uc2 = Instance.new("UICorner")
+    uc2.CornerRadius = UDim.new(0, 6)
+    uc2.Parent = btnVn
     
     local languageSelected = false
     
-    SetupWindow:Dialog({
-        Title = "Select Language / Chọn Ngôn Ngữ",
-        Content = "Please select your preferred language. / Vui lòng chọn ngôn ngữ của bạn.",
-        Buttons = {
-            {
-                Title = "English",
-                Callback = function()
-                    pcall(function() if not isfolder("as_free") then makefolder("as_free") end end)
-                    pcall(function() writefile("as_free/Language.txt", "EN") end)
-                    languageSelected = true
-                end
-            },
-            {
-                Title = "Tiếng Việt",
-                Callback = function()
-                    pcall(function() if not isfolder("as_free") then makefolder("as_free") end end)
-                    pcall(function() writefile("as_free/Language.txt", "VN") end)
-                    languageSelected = true
-                end
-            }
-        }
-    })
+    btnEn.MouseButton1Click:Connect(function()
+        pcall(function() if not isfolder("as_free") then makefolder("as_free") end end)
+        pcall(function() writefile("as_free/Language.txt", "EN") end)
+        languageSelected = true
+    end)
+    
+    btnVn.MouseButton1Click:Connect(function()
+        pcall(function() if not isfolder("as_free") then makefolder("as_free") end end)
+        pcall(function() writefile("as_free/Language.txt", "VN") end)
+        languageSelected = true
+    end)
     
     while not languageSelected do
         task.wait(0.1)
     end
     
-    Fluent:Destroy()
+    sg:Destroy()
     task.wait(0.5)
 end
 
@@ -336,7 +384,7 @@ local Locales = {
         
         IgUtil = "Tiện ích Trong Game", IgUtilD = "Chỉ hoạt động khi đang ở trong trận đấu.",
         IgAutoPlay = "BẬT Auto Play của Game", IgAutoPlayD = "Tự động kích hoạt nút Auto Play có sẵn của game.",
-        IgAutoLeave = "BẬT Tự động Rời Trận (Mắc giới hạn)", IgAutoLeaveD = "Tự rời ván nếu bạn đã cày đủ max giới hạn nguyên liệu.",
+        IgAutoLeave = "BẬT Tự động Rời Trận (Mắc giới hạn)", IgAutoLeaveD = "Tự rời ván nếu bạn đã cày đủ max giới hạn (Nguyên liệu evo, trait limit).",
         IgAutoLeaveBase = "BẬT Tự động Rời Trận (Bảo vệ Base)", IgAutoLeaveBaseD = "Tự rời ván ngay lập tức nếu nhà chính (Base) còn 0 máu để tiết kiệm thời gian.",
         IgAutoReplay = "BẬT Tự động Chơi lại", IgAutoReplayD = "Tự động bấm chơi lại khi hết ván.",
         IgReplayInf = "BẬT Chơi lại ở Wave (Chế độ Vô tận)", IgReplayInfD = "Tự động chơi lại khi đạt đến số Wave chỉ định ở chế độ Vô tận.",
@@ -365,10 +413,10 @@ local Locales = {
         ShopDyn = "Cửa hàng Thông minh", ShopDynD = "Thương gia (Merchant) hiển thị toàn bộ đồ. Raid/Event tự động làm mới.",
         MerchItem = "[Thương Gia] Mục tiêu Mua", MerchItemD = "Chọn đồ muốn mua từ Thương gia.",
         MerchTog = "BẬT Tự động Mua [Thương Gia]", MerchTogD = "Tự động mua đồ đã chọn khi thương gia xuất hiện.",
-        RaidItem = "[Raid] Mục tiêu Mua", RaidItemD = "Chọn đồ muốn mua từ Shop Raid.",
-        RaidTog = "BẬT Tự động Mua [Shop Raid]", RaidTogD = "Tự động gom đồ Raid đã chọn.",
-        EventItem = "[Sự Kiện] Mục tiêu Mua", EventItemD = "Chọn đồ muốn mua từ Shop Sự kiện.",
-        EventTog = "BẬT Tự động Mua [Shop Sự Kiện]", EventTogD = "Tự động gom đồ Sự kiện đã chọn.",
+        RaidItem = "[Raid Shop] Mục tiêu Mua", RaidItemD = "Chọn đồ muốn mua từ Raid Shop.",
+        RaidTog = "BẬT Tự động Mua [Raid Shop]", RaidTogD = "Tự động gom đồ Raid Shop đã chọn.",
+        EventItem = "[Event Shop] Mục tiêu Mua", EventItemD = "Chọn đồ muốn mua từ Event Shop.",
+        EventTog = "BẬT Tự động Mua [Event Shop]", EventTogD = "Tự động gom đồ Event Shop đã chọn.",
         PerkCfg = "Nâng cấp Bổ trợ (Perks)", PerkCfgD = "Tự động nâng cấp các chỉ số cơ bản của bạn.",
         PerkTarget = "Mục tiêu Nâng cấp", PerkTargetD = "Chỉ số muốn nâng (Máu, Tiền...).",
         PerkTog = "BẬT Tự động Nâng Bổ trợ", PerkTogD = "Tự động mua khi đủ vàng.",
