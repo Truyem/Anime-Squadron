@@ -273,7 +273,7 @@ end)
 
 local Locales = {
     EN = {
-        WinTitle = "Free HUB", WinSub = "Anime Squadron",
+        WinTitle = "🇻🇳 Free HUB", WinSub = "Anime Squadron",
         TabAutoFarm = "Auto Farm", TabPriority = "Priority Settings", TabMaps = "Trait Maps", TabEvo = "Evo & Craft", TabReroll = "Auto Reroll", TabShop = "Shop & Upgrades", TabClaims = "Claims & Misc", TabSniper = "Challenge Sniper", TabIngame = "Ingame Helper", TabParty = "Party & Multi", TabWebhook = "Webhook", TabSettings = "Settings",
         
         StuckAutoHop = "Auto Server Hop (Stuck Failsafe)", StuckAutoHopD = "Automatically hops to another server if stuck in the Lobby for too long.",
@@ -372,7 +372,7 @@ local Locales = {
         SetLang = "Language / Ngôn ngữ", SetLangD = "Select UI language. Tắt Script đi mở lại để áp dụng!"
     },
     VN = {
-        WinTitle = "Free HUB", WinSub = "Anime Squadron",
+        WinTitle = "🇻🇳 Free HUB", WinSub = "Anime Squadron",
         TabAutoFarm = "Auto Farm", TabPriority = "Cài đặt Ưu tiên", TabMaps = "Bản đồ Trait", TabEvo = "Tiến hoá & Ghép", TabReroll = "Auto Đập Chỉ số", TabShop = "Cửa hàng & Nâng cấp", TabClaims = "Nhận thưởng & Code", TabSniper = "Săn Challenge", TabIngame = "Hỗ trợ Trong Game", TabParty = "Tổ đội (Nhiều Acc)", TabWebhook = "Thông báo Webhook", TabSettings = "Cài đặt (Settings)",
         
         StuckAutoHop = "BẬT Tự động Đổi Server (Chống Kẹt)", StuckAutoHopD = "Tự động tìm server khác nếu kẹt ở Sảnh quá lâu.",
