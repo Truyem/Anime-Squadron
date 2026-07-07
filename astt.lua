@@ -171,13 +171,55 @@ local isfolder = isfolder or function() return false end
 
 if not isfolder("as_free") then pcall(function() makefolder("as_free") end) end
 
+if not isfile("as_free/Language.txt") then
+    local SetupWindow = Fluent:CreateWindow({
+        Title = "Language Setup",
+        SubTitle = "Anime Squadron",
+        TabWidth = 160,
+        Size = UDim2.fromOffset(400, 320),
+        Acrylic = true,
+        Theme = "Dark",
+        MinimizeKey = Enum.KeyCode.LeftControl
+    })
+    
+    local languageSelected = false
+    
+    SetupWindow:Dialog({
+        Title = "Select Language / Chọn Ngôn Ngữ",
+        Content = "Please select your preferred language. / Vui lòng chọn ngôn ngữ của bạn.",
+        Buttons = {
+            {
+                Title = "English",
+                Callback = function()
+                    pcall(function() if not isfolder("as_free") then makefolder("as_free") end end)
+                    pcall(function() writefile("as_free/Language.txt", "EN") end)
+                    languageSelected = true
+                end
+            },
+            {
+                Title = "Tiếng Việt",
+                Callback = function()
+                    pcall(function() if not isfolder("as_free") then makefolder("as_free") end end)
+                    pcall(function() writefile("as_free/Language.txt", "VN") end)
+                    languageSelected = true
+                end
+            }
+        }
+    })
+    
+    while not languageSelected do
+        task.wait(0.1)
+    end
+    
+    Fluent:Destroy()
+    task.wait(0.5)
+end
+
 local currentLang = "EN"
 pcall(function()
     if isfile("as_free/Language.txt") then
         local l = readfile("as_free/Language.txt")
         if l == "VN" or l == "EN" then currentLang = l end
-    else
-        writefile("as_free/Language.txt", "EN")
     end
 end)
 
@@ -992,24 +1034,7 @@ local WebhookOnInterval = Tabs.Webhook:AddToggle("WebhookOnInterval", { Title = 
 local WebhookOnEvoCraft = Tabs.Webhook:AddToggle("WebhookOnEvoCraft", { Title = L.WbEvo, Description = L.WbEvoD, Default = false })
 local WebhookInterval = Tabs.Webhook:AddSlider("WebhookInterval", { Title = L.WbTime, Description = L.WbTimeD, Default = 10, Min = 1, Max = 60, Rounding = 0 })
 
-local DropLang = Tabs.Settings:AddDropdown("ScriptLanguage", {
-    Title = L.SetLang,
-    Description = L.SetLangD,
-    Values = {"EN", "VN"},
-    Multi = false,
-    Default = currentLang
-})
-DropLang:OnChanged(function(Value)
-    if isfile and writefile and isfolder then
-        pcall(function()
-            if not isfolder("as_free") then makefolder("as_free") end
-            writefile("as_free/Language.txt", Value)
-        end)
-    end
-    if Value ~= currentLang then
-        Fluent:Notify({ Title = "Language Changed", Content = "Please RE-EXECUTE the script to apply!", Duration = 5 })
-    end
-end)
+
 
 SaveManager:SetLibrary(Fluent)
 InterfaceManager:SetLibrary(Fluent)
