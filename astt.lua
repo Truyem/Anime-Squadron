@@ -664,8 +664,12 @@ task.spawn(function()
         if get then
         local succ, recipes = pcall(function() return get:InvokeServer() end)
         if succ and type(recipes) == "table" then
+            _G.AnimeSquadron_Recipes = recipes
             for name, _ in pairs(recipes) do
                 table.insert(craftTargets, name)
+            end
+            if _G.AnimeSquadron_UpdateCraftQueueUI then
+                _G.AnimeSquadron_UpdateCraftQueueUI()
             end
         end
         end
@@ -691,15 +695,35 @@ end
 _G.AnimeSquadron_UpdateCraftQueueUI = function() end
 
 local CraftQueuePara = Tabs.EvoCraft:AddParagraph({ Title = L.CraftQueue, Content = L.CraftQueueD })
+local CraftReqPara = Tabs.EvoCraft:AddParagraph({ Title = currentLang == "VN" and "Tổng Nguyên Liệu Cần" or "Total Materials Required", Content = "0" })
+
 _G.AnimeSquadron_UpdateCraftQueueUI = function()
     if #_G.AnimeSquadron_CraftQueue == 0 then
         CraftQueuePara:SetDesc(L.CraftQueueD)
+        CraftReqPara:SetDesc(currentLang == "VN" and "Trống" or "Empty")
     else
         local lines = {}
+        local totalMats = {}
         for i, task in ipairs(_G.AnimeSquadron_CraftQueue) do
             table.insert(lines, tostring(i) .. ". " .. task.name .. " x" .. task.qty)
+            if _G.AnimeSquadron_Recipes and _G.AnimeSquadron_Recipes[task.name] then
+                for matName, amt in pairs(_G.AnimeSquadron_Recipes[task.name]) do
+                    totalMats[matName] = (totalMats[matName] or 0) + (amt * task.qty)
+                end
+            end
         end
         CraftQueuePara:SetDesc(table.concat(lines, "\n"))
+        
+        local matLines = {}
+        for matName, amt in pairs(totalMats) do
+            table.insert(matLines, "- " .. matName .. ": " .. tostring(amt))
+        end
+        table.sort(matLines)
+        if #matLines == 0 then
+            CraftReqPara:SetDesc(currentLang == "VN" and "Đang tải dữ liệu..." or "Loading data...")
+        else
+            CraftReqPara:SetDesc(table.concat(matLines, "\n"))
+        end
     end
     if isfile and writefile then
         pcall(function() writefile(basePath .. "/CraftQueue.json", game:GetService("HttpService"):JSONEncode(_G.AnimeSquadron_CraftQueue)) end)
