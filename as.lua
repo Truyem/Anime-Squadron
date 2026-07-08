@@ -1049,11 +1049,13 @@ else
     StatusParagraph = Tabs.AutoFarm:AddParagraph({ Title = L.AF_StatI, Content = L.AF_StatID })
 end
 
+local userId = game:GetService("Players").LocalPlayer and game:GetService("Players").LocalPlayer.UserId or 0
+local statsFileName = basePath .. "/DailyStats_" .. tostring(userId) .. ".json"
+
 local SessionStats = {
     Date = os.date("%Y-%m-%d"),
     Matches = 0,
-    TraitShards = 0, PerfectCubes = 0, RerollCubes = 0,
-    StartTrait = -1, StartPerfect = -1, StartReroll = -1
+    Gained = {}
 }
 
 local StatsParagraph = Tabs.AutoFarm:AddParagraph({
@@ -1063,25 +1065,13 @@ local StatsParagraph = Tabs.AutoFarm:AddParagraph({
 
 local function saveSessionStats()
     if writefile then
-        pcall(function() writefile(basePath .. "/DailyStats.json", game:GetService("HttpService"):JSONEncode(SessionStats)) end)
+        pcall(function() writefile(statsFileName, game:GetService("HttpService"):JSONEncode(SessionStats)) end)
     end
 end
 
 local function updateStatsUI()
     if StatsParagraph then
-        local t_base = SessionStats.StartTrait == -1 and 0 or SessionStats.StartTrait
-        local p_base = SessionStats.StartPerfect == -1 and 0 or SessionStats.StartPerfect
-        local r_base = SessionStats.StartReroll == -1 and 0 or SessionStats.StartReroll
-        
-        local t_current = t_base + SessionStats.TraitShards
-        local p_current = p_base + SessionStats.PerfectCubes
-        local r_current = r_base + SessionStats.RerollCubes
-        
         local matchesStr = currentLang == "VN" and "Số trận đã chơi: " or "Matches Played: "
-        local shardsStr = currentLang == "VN" and "Trait Shards: +" or "Trait Shards: +"
-        local pCubesStr = currentLang == "VN" and "Perfect Cubes: +" or "Perfect Cubes: +"
-        local rCubesStr = currentLang == "VN" and "Reroll Cubes: +" or "Reroll Cubes: +"
-        
         StatsParagraph:SetDesc(string.format("%s%d\n%s%d (Current: %d)\n%s%d (Current: %d)\n%s%d (Current: %d)", 
             matchesStr, SessionStats.Matches, 
             shardsStr, SessionStats.TraitShards, t_current, 
@@ -2464,23 +2454,18 @@ _G.AnimeSquadronStatsLoop = (_G.AnimeSquadronStatsLoop or 0) + 1
 local currentStatsLoop = _G.AnimeSquadronStatsLoop
 task.spawn(function()
     local util
-    local lastTrait, lastPerfect, lastReroll = -1, -1, -1
     local knownChars = nil
     local lastItems = nil
+    local sessionStarted = false
     while true do
         if _G.AnimeSquadronStatsLoop ~= currentStatsLoop then return end
         task.wait(5)
         pcall(function() util = require(game:GetService("Players").LocalPlayer.PlayerScripts.Client.Utility) end)
         if util and util.data and util.data.stats then
-            local currentTrait = util.data.stats["Trait Shards"] or 0
-            local currentPerfect = util.data.stats["Perfect Cubes"] or 0
-            local currentReroll = util.data.stats["Reroll Cubes"] or 0
-            
             local currentItems = {}
-            if util.data.items then
-                for k, v in pairs(util.data.items) do
-                    currentItems[k] = v
-                end
+            local statKeys = {"Gold", "Gems", "Trait Shards", "Perfect Cubes", "Reroll Cubes"}
+            for _, k in ipairs(statKeys) do
+                if util.data.stats[k] then currentItems[k] = util.data.stats[k] end
             end
             
             local currentChars = {}
@@ -2490,18 +2475,11 @@ task.spawn(function()
                 end
             end
             
-            if lastTrait ~= -1 and lastPerfect ~= -1 and lastReroll ~= -1 and knownChars ~= nil and lastItems ~= nil then
-                if SessionStats.StartTrait == -1 then
-                    SessionStats.StartTrait = currentTrait
-                    SessionStats.StartPerfect = currentPerfect
-                    SessionStats.StartReroll = currentReroll
-                    saveSessionStats()
+            if lastItems ~= nil and knownChars ~= nil then
+                if not sessionStarted then
+                    sessionStarted = true
                     updateStatsUI()
                 end
-                
-                local diffTrait = currentTrait - lastTrait
-                local diffPerfect = currentPerfect - lastPerfect
-                local diffReroll = currentReroll - lastReroll
                 
                 local droppedUnits = {}
                 for k, v in pairs(currentChars) do
@@ -2520,19 +2498,19 @@ task.spawn(function()
                     end
                 end
                 
-                if diffTrait > 0 or diffPerfect > 0 or diffReroll > 0 or #droppedUnits > 0 or hasItemDiff then
-                    if diffTrait > 0 then SessionStats.TraitShards = SessionStats.TraitShards + diffTrait end
-                    if diffPerfect > 0 then SessionStats.PerfectCubes = SessionStats.PerfectCubes + diffPerfect end
-                    if diffReroll > 0 then SessionStats.RerollCubes = SessionStats.RerollCubes + diffReroll end
+                if #droppedUnits > 0 or hasItemDiff then
+                    for k, diff in pairs(diffItems) do
+                        SessionStats.Gained[k] = (SessionStats.Gained[k] or 0) + diff
+                    end
                     
                     saveSessionStats()
                     updateStatsUI()
                     
                     if Options.WebhookOnDrop and Options.WebhookOnDrop.Value and Options.WebhookURL and Options.WebhookURL.Value ~= "" then
                         sendWebhookData("DROP", {
-                            trait = diffTrait,
-                            perfect = diffPerfect,
-                            reroll = diffReroll,
+                            trait = diffItems["Trait Shards"] or 0,
+                            perfect = diffItems["Perfect Cubes"] or 0,
+                            reroll = diffItems["Reroll Cubes"] or 0,
                             units = droppedUnits,
                             items = diffItems
                         })
@@ -2540,9 +2518,6 @@ task.spawn(function()
                     end
                 end
             end
-            lastTrait = currentTrait
-            lastPerfect = currentPerfect
-            lastReroll = currentReroll
             knownChars = currentChars
             lastItems = currentItems
         end
