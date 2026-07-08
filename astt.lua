@@ -1105,8 +1105,11 @@ local function resetSessionStats()
 end
 
 local function loadSessionStats()
-    if isfile and readfile and isfile(basePath .. "/DailyStats.json") then
-        local s, res = pcall(function() return game:GetService("HttpService"):JSONDecode(readfile(basePath .. "/DailyStats.json")) end)
+    local userId = game:GetService("Players").LocalPlayer.UserId
+    local newFile = basePath .. "/DailyStats_" .. userId .. ".json"
+    
+    if isfile and readfile and isfile(newFile) then
+        local s, res = pcall(function() return game:GetService("HttpService"):JSONDecode(readfile(newFile)) end)
         if s and type(res) == "table" then
             if res.Date == os.date("%Y-%m-%d") then
                 SessionStats.Matches = res.Matches or 0
@@ -1117,11 +1120,11 @@ local function loadSessionStats()
                 SessionStats.StartPerfect = res.StartPerfect or -1
                 SessionStats.StartReroll = res.StartReroll or -1
                 updateStatsUI()
-            else
-                resetSessionStats()
+                return
             end
         end
     end
+    resetSessionStats()
 end
 loadSessionStats()
 local friendToggle = Tabs.AutoFarm:AddToggle("FriendsOnly", { Title = L.AF_Friend, Description = L.AF_FriendD, Default = true })
