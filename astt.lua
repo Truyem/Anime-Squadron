@@ -1,6 +1,18 @@
 if not game:IsLoaded() then
     game.Loaded:Wait()
 end
+
+local LP = game:GetService("Players").LocalPlayer
+local guiLoaded = LP:WaitForChild("PlayerGui", 30)
+local scriptsLoaded = LP:WaitForChild("PlayerScripts", 30)
+local clientLoaded = scriptsLoaded and scriptsLoaded:WaitForChild("Client", 30)
+local utilLoaded = clientLoaded and clientLoaded:WaitForChild("Utility", 30)
+
+if not guiLoaded or not utilLoaded then
+    warn("[AnimeSquadron] Failed to load HUD/Scripts in time! Reconnecting to Lobby...")
+    game:GetService("TeleportService"):Teleport(71132543521245, LP)
+    return
+end
 local function loadLib(url)
     local lib
     for i = 1, 5 do
@@ -1071,6 +1083,7 @@ end
 
 local function updateStatsUI()
     if StatsParagraph then
+        print("[AnimeSquadron] Running NEW updateStatsUI version!")
         local matchesStr = currentLang == "VN" and "Số trận đã chơi: " or "Matches Played: "
         local lines = { matchesStr .. tostring(SessionStats.Matches) }
         
