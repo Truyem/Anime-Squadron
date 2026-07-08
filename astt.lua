@@ -2294,6 +2294,8 @@ end
     local strTrait = tostring(traitShards)
     local strPerfect = tostring(perfectCubes)
     local strReroll = tostring(rerollCubes)
+    local strGems = tostring(gems)
+    local strGold = tostring(gold)
     local droppedItems = {}
     
     if status == "DROP" and type(diffs) == "table" then
@@ -2315,8 +2317,16 @@ end
             end
         end
         if diffs.items and type(diffs.items) == "table" then
+            if diffs.items["Gems"] and diffs.items["Gems"] > 0 then
+                strGems = tostring(gems - diffs.items["Gems"]) .. " + " .. diffs.items["Gems"]
+            end
+            if diffs.items["Gold"] and diffs.items["Gold"] > 0 then
+                strGold = tostring(gold - diffs.items["Gold"]) .. " + " .. diffs.items["Gold"]
+            end
             for itemName, qty in pairs(diffs.items) do
-                table.insert(droppedItems, itemName .. " +" .. tostring(qty))
+                if itemName ~= "Trait Shards" and itemName ~= "Perfect Cubes" and itemName ~= "Reroll Cubes" and itemName ~= "Gold" and itemName ~= "Gems" then
+                    table.insert(droppedItems, itemName .. " +" .. tostring(qty))
+                end
             end
         end
     end
@@ -2390,8 +2400,8 @@ end
             { name = "👤 Player", value = playerName, inline = true },
             { name = "⭐ Level", value = tostring(level), inline = true },
             { name = "🗺️ Map", value = mapName, inline = true },
-            { name = "<:Gems:1521405276127760434> Gems", value = tostring(gems), inline = true },
-            { name = "<:Gold:1521405249988989008> Gold", value = tostring(gold), inline = true },
+            { name = "<:Gems:1521405276127760434> Gems", value = strGems, inline = true },
+            { name = "<:Gold:1521405249988989008> Gold", value = strGold, inline = true },
             { name = "<:TraitShards:1521405216346607697> Trait Shards", value = strTrait, inline = true },
             { name = "<:PerfectCubes:1521405365416099950> Perfect Cubes", value = strPerfect, inline = true },
             { name = "<:RerollCubes:1521405341667954789> Reroll Cubes", value = strReroll, inline = true },
