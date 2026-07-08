@@ -957,34 +957,29 @@ task.spawn(function()
 end)
 
 if isLobby then
-    _G.AnimeSquadronShopLoop = (_G.AnimeSquadronShopLoop or 0) + 1
-    local currentLoopId = _G.AnimeSquadronShopLoop
     task.spawn(function()
         local get = game:GetService("ReplicatedStorage").Remotes.Shops:WaitForChild("get", 30)
         if not get then return end
         local HttpService = game:GetService("HttpService")
         
-        while task.wait(10) do
-            if _G.AnimeSquadronShopLoop ~= currentLoopId then return end
-            local function updateShop(shopId, dropdown, saveKey)
-                local succ, data = pcall(function() return get:InvokeServer(shopId) end)
-                if succ and type(data) == "table" then
-                    local items = {}
-                    for k,v in pairs(data) do
-                        table.insert(items, tostring(k))
-                    end
-                    local currentShopItem = dropdown.Value
-                    if #items == 0 then table.insert(items, "(Empty)") else
-                        saveShopItems(saveKey, items)
-                    end
-                    dropdown:SetValues(items)
-                    if currentShopItem then dropdown:SetValue(currentShopItem) end
+        local function updateShop(shopId, dropdown, saveKey)
+            local succ, data = pcall(function() return get:InvokeServer(shopId) end)
+            if succ and type(data) == "table" then
+                local items = {}
+                for k,v in pairs(data) do
+                    table.insert(items, tostring(k))
                 end
+                local currentShopItem = dropdown.Value
+                if #items == 0 then table.insert(items, "(Empty)") else
+                    saveShopItems(saveKey, items)
+                end
+                dropdown:SetValues(items)
+                if currentShopItem then dropdown:SetValue(currentShopItem) end
             end
-            
-            updateShop("gt_city_raid", DropdownRaidShopItem, "Raid")
-            updateShop("baras_event", DropdownEventShopItem, "Event")
         end
+        
+        updateShop("gt_city_raid", DropdownRaidShopItem, "Raid")
+        updateShop("baras_event", DropdownEventShopItem, "Event")
     end)
 end
 
@@ -1556,7 +1551,31 @@ if isLobby then
                 pcall(function() game:GetService("ReplicatedStorage").Remotes.Battlepass.claim_all:InvokeServer() end)
             end
             if Options.AutoMilestones and Options.AutoMilestones.Value then
-                pcall(function() game:GetService("ReplicatedStorage").Remotes.Level_Milestones.claim:InvokeServer() end)
+                task.spawn(function()
+                    if _G.ClaimingMilestones then return end
+                    _G.ClaimingMilestones = true
+                    _G.ClaimedMilestones = _G.ClaimedMilestones or {}
+                    
+                    local currentLevel = 0
+                    pcall(function()
+                        local util = require(game:GetService("ReplicatedStorage").Modules.util)
+                        currentLevel = util and util.data and util.data.stats and util.data.stats.level or 0
+                    end)
+                    
+                    if currentLevel >= 5 then
+                        for lvl = 5, currentLevel, 5 do
+                            if not _G.ClaimedMilestones[lvl] then
+                                local succ = pcall(function() return game:GetService("ReplicatedStorage").Remotes.Level_Milestones.claim:InvokeServer(lvl) end)
+                                if succ then
+                                    _G.ClaimedMilestones[lvl] = true
+                                    task.wait(0.2)
+                                end
+                            end
+                        end
+                    end
+                    task.wait(2)
+                    _G.ClaimingMilestones = false
+                end)
             end
             if Options.AutoDiscovery and Options.AutoDiscovery.Value then
                 pcall(function() game:GetService("ReplicatedStorage").Remotes.Characters.claim_all_index:InvokeServer() end)
