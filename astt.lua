@@ -1065,13 +1065,28 @@ end
 
 local function updateStatsUI()
     if StatsParagraph then
-        local t_base = SessionStats.StartTrait == -1 and 0 or SessionStats.StartTrait
-        local p_base = SessionStats.StartPerfect == -1 and 0 or SessionStats.StartPerfect
-        local r_base = SessionStats.StartReroll == -1 and 0 or SessionStats.StartReroll
+        local t_current = 0
+        local p_current = 0
+        local r_current = 0
         
-        local t_current = t_base + SessionStats.TraitShards
-        local p_current = p_base + SessionStats.PerfectCubes
-        local r_current = r_base + SessionStats.RerollCubes
+        pcall(function()
+            local util = require(game:GetService("ReplicatedStorage").Modules.util)
+            if util and util.data and util.data.stats then
+                t_current = util.data.stats["Trait Shards"] or 0
+                p_current = util.data.stats["Perfect Cubes"] or 0
+                r_current = util.data.stats["Reroll Cubes"] or 0
+            end
+        end)
+        
+        if t_current == 0 and p_current == 0 and r_current == 0 then
+            local t_base = SessionStats.StartTrait == -1 and 0 or SessionStats.StartTrait
+            local p_base = SessionStats.StartPerfect == -1 and 0 or SessionStats.StartPerfect
+            local r_base = SessionStats.StartReroll == -1 and 0 or SessionStats.StartReroll
+            
+            t_current = t_base + SessionStats.TraitShards
+            p_current = p_base + SessionStats.PerfectCubes
+            r_current = r_base + SessionStats.RerollCubes
+        end
         
         local matchesStr = currentLang == "VN" and "Số trận đã chơi: " or "Matches Played: "
         local shardsStr = currentLang == "VN" and "Trait Shards: +" or "Trait Shards: +"
