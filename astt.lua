@@ -1063,7 +1063,8 @@ local StatsParagraph = Tabs.AutoFarm:AddParagraph({
 
 local function saveSessionStats()
     if writefile then
-        pcall(function() writefile(basePath .. "/DailyStats.json", game:GetService("HttpService"):JSONEncode(SessionStats)) end)
+        local userId = game:GetService("Players").LocalPlayer.UserId
+        pcall(function() writefile(basePath .. "/DailyStats_" .. userId .. ".json", game:GetService("HttpService"):JSONEncode(SessionStats)) end)
     end
 end
 
@@ -1882,6 +1883,7 @@ if isLobby then
                     local chData = challengeData["1d"]
                     if chData.world ~= lastDailyWorld or chData.act ~= lastDailyAct then
                         dailyCompleted = false
+                        if lastDailyWorld ~= nil then resetSessionStats() end
                         lastDailyWorld = chData.world
                         lastDailyAct = chData.act
                     end
