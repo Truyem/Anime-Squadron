@@ -918,18 +918,16 @@ task.spawn(function()
             }
             
             local tempItems = {}
-            for _, folderName in ipairs({"Items", "Materials"}) do
-                local folder = rep:WaitForChild(folderName, 30)
-                if folder then
-                    for _, v in ipairs(folder:GetChildren()) do
-                        local name = v.Name
-                        if whitelist[name] then
-                            if not table.find(tempItems, name) then table.insert(tempItems, name) end
-                        else
-                            if not blacklist[name] and not string.find(name, "XP") and not string.find(name, "Coin") then
-                                if not table.find(tempItems, name) then table.insert(tempItems, name) end
-                            end
-                        end
+            for k, _ in pairs(whitelist) do
+                table.insert(tempItems, k)
+            end
+            
+            local folder = rep:WaitForChild("Items", 30)
+            if folder then
+                for _, v in ipairs(folder:GetChildren()) do
+                    local name = v.Name
+                    if not whitelist[name] and not blacklist[name] and not string.find(name, "XP") and not string.find(name, "Coin") then
+                        if not table.find(tempItems, name) then table.insert(tempItems, name) end
                     end
                 end
             end
