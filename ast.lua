@@ -1072,39 +1072,48 @@ end
 local function updateStatsUI()
     if StatsParagraph then
         local matchesStr = currentLang == "VN" and "Số trận đã chơi: " or "Matches Played: "
-        StatsParagraph:SetDesc(string.format("%s%d\n%s%d (Current: %d)\n%s%d (Current: %d)\n%s%d (Current: %d)", 
-            matchesStr, SessionStats.Matches, 
-            shardsStr, SessionStats.TraitShards, t_current, 
-            pCubesStr, SessionStats.PerfectCubes, p_current, 
-            rCubesStr, SessionStats.RerollCubes, r_current))
+        local lines = { matchesStr .. tostring(SessionStats.Matches) }
+        
+        local util
+        pcall(function() util = require(game:GetService("Players").LocalPlayer.PlayerScripts.Client.Utility) end)
+        
+        local function getCurrentAmount(name)
+            if not (util and util.data) then return 0 end
+            if name == "Gold" then return util.data.stats and util.data.stats.Gold or 0 end
+            if name == "Gems" then return util.data.stats and util.data.stats.Gems or 0 end
+            if name == "Trait Shards" then return util.data.stats and util.data.stats["Trait Shards"] or 0 end
+            if name == "Perfect Cubes" then return util.data.stats and util.data.stats["Perfect Cubes"] or 0 end
+            if name == "Reroll Cubes" then return util.data.stats and util.data.stats["Reroll Cubes"] or 0 end
+            return 0
+        end
+        
+        local displayOrder = {"Gold", "Gems", "Trait Shards", "Perfect Cubes", "Reroll Cubes"}
+        
+        for _, name in ipairs(displayOrder) do
+            local gained = SessionStats.Gained[name] or 0
+            local current = getCurrentAmount(name)
+            table.insert(lines, string.format("%s: +%d (Current: %d)", name, gained, current))
+        end
+        
+        StatsParagraph:SetDesc(table.concat(lines, "\n"))
     end
 end
 
 local function resetSessionStats()
     SessionStats.Matches = 0
-    SessionStats.TraitShards = 0
-    SessionStats.PerfectCubes = 0
-    SessionStats.RerollCubes = 0
-    SessionStats.StartTrait = -1
-    SessionStats.StartPerfect = -1
-    SessionStats.StartReroll = -1
+    SessionStats.Gained = {}
     SessionStats.Date = os.date("%Y-%m-%d")
     saveSessionStats()
     updateStatsUI()
 end
 
 local function loadSessionStats()
-    if isfile and readfile and isfile(basePath .. "/DailyStats.json") then
-        local s, res = pcall(function() return game:GetService("HttpService"):JSONDecode(readfile(basePath .. "/DailyStats.json")) end)
+    if isfile and readfile and isfile(statsFileName) then
+        local s, res = pcall(function() return game:GetService("HttpService"):JSONDecode(readfile(statsFileName)) end)
         if s and type(res) == "table" then
             if res.Date == os.date("%Y-%m-%d") then
                 SessionStats.Matches = res.Matches or 0
-                SessionStats.TraitShards = res.TraitShards or 0
-                SessionStats.PerfectCubes = res.PerfectCubes or 0
-                SessionStats.RerollCubes = res.RerollCubes or 0
-                SessionStats.StartTrait = res.StartTrait or -1
-                SessionStats.StartPerfect = res.StartPerfect or -1
-                SessionStats.StartReroll = res.StartReroll or -1
+                SessionStats.Gained = type(res.Gained) == "table" and res.Gained or {}
                 updateStatsUI()
             else
                 resetSessionStats()
