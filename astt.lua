@@ -1140,11 +1140,52 @@ local AutoClaimDaily = Tabs.AutoFarm:AddToggle("AutoClaimDaily", { Title = L.AF_
 local AutoClaimBundle = Tabs.AutoFarm:AddToggle("AutoClaimBundle", { Title = L.AF_Bun, Description = L.AF_BunD, Default = false })
 local AutoQuest = Tabs.AutoFarm:AddToggle("AutoQuest", { Title = L.AF_Quest, Description = L.AF_QuestD, Default = false })
 local AutoToggle = Tabs.AutoFarm:AddToggle("MasterAutoRun", { Title = L.AF_Master, Description = L.AF_MasterD, Default = false })
+local function handleDisconnectPrompt(child)
+    if child.Name ~= "ErrorPrompt" then return end
+    task.wait(1)
+    local errorText = ""
+    for _, obj in pairs(child:GetDescendants()) do
+        if obj:IsA("TextLabel") and obj.Text ~= "" then
+            errorText = errorText .. " " .. string.lower(obj.Text)
+        end
+    end
+    if string.find(errorText, "264") or string.find(errorText, "273") or string.find(errorText, "same account") then
+        warn("[Auto-Reconnect] Bị đá do log acc ở máy khác (Lỗi 264/273). HỦY RECONNECT!")
+        return
+    end
+    print("[Auto-Reconnect] Bị văng do lỗi khác. Đang thử vào lại liên tục...")
+    task.spawn(function()
+        while true do
+            task.wait(5)
+            pcall(function()
+                game:GetService("TeleportService"):Teleport(71132543521245, game:GetService("Players").LocalPlayer)
+            end)
+        end
+    end)
+end
+
+pcall(function()
+    local promptOverlay = game:GetService("CoreGui"):WaitForChild("RobloxPromptGui", 10):WaitForChild("promptOverlay", 10)
+    if promptOverlay then
+        promptOverlay.ChildAdded:Connect(handleDisconnectPrompt)
+        for _, child in pairs(promptOverlay:GetChildren()) do
+            handleDisconnectPrompt(child)
+        end
+    end
+end)
+
 game:GetService("GuiService").ErrorMessageChanged:Connect(function(errMessage)
     if errMessage and errMessage ~= "" then
-        Fluent:Notify({ Title = "Connection Lost", Content = "Auto reconnecting in 5 seconds...", Duration = 5 })
-        task.wait(5)
-        game:GetService("TeleportService"):Teleport(game.PlaceId, game:GetService("Players").LocalPlayer)
+        local lowerErr = string.lower(errMessage)
+        if string.find(lowerErr, "264") or string.find(lowerErr, "273") or string.find(lowerErr, "same account") then return end
+        task.spawn(function()
+            while true do
+                task.wait(5)
+                pcall(function()
+                    game:GetService("TeleportService"):Teleport(71132543521245, game:GetService("Players").LocalPlayer)
+                end)
+            end
+        end)
     end
 end)
 
