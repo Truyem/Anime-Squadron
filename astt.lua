@@ -1117,12 +1117,17 @@ local function loadSessionStats()
     if isfile and readfile and isfile(newFile) then
         local s, res = pcall(function() return game:GetService("HttpService"):JSONDecode(readfile(newFile)) end)
         if s and type(res) == "table" then
-            SessionStats.Matches = res.Matches or 0
-            SessionStats.TraitShards = res.TraitShards or 0
-            SessionStats.PerfectCubes = res.PerfectCubes or 0
-            SessionStats.RerollCubes = res.RerollCubes or 0
-            updateStatsUI()
-            return
+            if res.Date == os.date("%Y-%m-%d") then
+                SessionStats.Matches = res.Matches or 0
+                SessionStats.TraitShards = res.TraitShards or 0
+                SessionStats.PerfectCubes = res.PerfectCubes or 0
+                SessionStats.RerollCubes = res.RerollCubes or 0
+                SessionStats.StartTrait = res.StartTrait or -1
+                SessionStats.StartPerfect = res.StartPerfect or -1
+                SessionStats.StartReroll = res.StartReroll or -1
+                updateStatsUI()
+                return
+            end
         end
     end
     resetSessionStats()
