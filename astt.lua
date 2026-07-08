@@ -1052,7 +1052,8 @@ end
 local SessionStats = {
     Date = os.date("%Y-%m-%d"),
     Matches = 0,
-    TraitShards = 0, PerfectCubes = 0, RerollCubes = 0
+    TraitShards = 0, PerfectCubes = 0, RerollCubes = 0,
+    StartTrait = -1, StartPerfect = -1, StartReroll = -1
 }
 
 local StatsParagraph = Tabs.AutoFarm:AddParagraph({
@@ -1063,26 +1064,21 @@ local StatsParagraph = Tabs.AutoFarm:AddParagraph({
 local function saveSessionStats()
     if writefile then
         local userId = game:GetService("Players").LocalPlayer.UserId
-        local toSave = {
-            Matches = SessionStats.Matches,
-            TraitShards = SessionStats.TraitShards,
-            PerfectCubes = SessionStats.PerfectCubes,
-            RerollCubes = SessionStats.RerollCubes,
-            Date = SessionStats.Date
-        }
-        pcall(function() writefile(basePath .. "/DailyStats_" .. userId .. ".json", game:GetService("HttpService"):JSONEncode(toSave)) end)
+        pcall(function() writefile(basePath .. "/DailyStats_" .. userId .. ".json", game:GetService("HttpService"):JSONEncode(SessionStats)) end)
     end
 end
 
 local function updateStatsUI()
     if StatsParagraph then
-        local t_base = SessionStats.StartTrait == -1 and 0 or SessionStats.StartTrait
-        local p_base = SessionStats.StartPerfect == -1 and 0 or SessionStats.StartPerfect
-        local r_base = SessionStats.StartReroll == -1 and 0 or SessionStats.StartReroll
-        
-        local t_current = t_base + SessionStats.TraitShards
-        local p_current = p_base + SessionStats.PerfectCubes
-        local r_current = r_base + SessionStats.RerollCubes
+        local liveTrait, livePerfect, liveReroll = 0, 0, 0
+        pcall(function()
+            local util = require(game:GetService("Players").LocalPlayer.PlayerScripts.Client.Utility)
+            if util and util.data and util.data.stats then
+                liveTrait = util.data.stats["Trait Shards"] or 0
+                livePerfect = util.data.stats["Perfect Cubes"] or 0
+                liveReroll = util.data.stats["Reroll Cubes"] or 0
+            end
+        end)
         
         local matchesStr = currentLang == "VN" and "Số trận đã chơi: " or "Matches Played: "
         local shardsStr = currentLang == "VN" and "Trait Shards: +" or "Trait Shards: +"
@@ -1091,9 +1087,9 @@ local function updateStatsUI()
         
         StatsParagraph:SetDesc(string.format("%s%d\n%s%d (Current: %d)\n%s%d (Current: %d)\n%s%d (Current: %d)", 
             matchesStr, SessionStats.Matches, 
-            shardsStr, SessionStats.TraitShards, t_current, 
-            pCubesStr, SessionStats.PerfectCubes, p_current, 
-            rCubesStr, SessionStats.RerollCubes, r_current))
+            shardsStr, SessionStats.TraitShards, liveTrait, 
+            pCubesStr, SessionStats.PerfectCubes, livePerfect, 
+            rCubesStr, SessionStats.RerollCubes, liveReroll))
     end
 end
 
@@ -1102,9 +1098,6 @@ local function resetSessionStats()
     SessionStats.TraitShards = 0
     SessionStats.PerfectCubes = 0
     SessionStats.RerollCubes = 0
-    SessionStats.StartTrait = -1
-    SessionStats.StartPerfect = -1
-    SessionStats.StartReroll = -1
     SessionStats.Date = os.date("%Y-%m-%d")
     saveSessionStats()
     updateStatsUI()
@@ -1122,9 +1115,6 @@ local function loadSessionStats()
                 SessionStats.TraitShards = res.TraitShards or 0
                 SessionStats.PerfectCubes = res.PerfectCubes or 0
                 SessionStats.RerollCubes = res.RerollCubes or 0
-                SessionStats.StartTrait = res.StartTrait or -1
-                SessionStats.StartPerfect = res.StartPerfect or -1
-                SessionStats.StartReroll = res.StartReroll or -1
                 updateStatsUI()
                 return
             end
@@ -2502,13 +2492,6 @@ task.spawn(function()
             end
             
             if lastTrait ~= -1 and lastPerfect ~= -1 and lastReroll ~= -1 and knownChars ~= nil and lastItems ~= nil then
-                if SessionStats.StartTrait == -1 then
-                    SessionStats.StartTrait = currentTrait
-                    SessionStats.StartPerfect = currentPerfect
-                    SessionStats.StartReroll = currentReroll
-                    saveSessionStats()
-                    updateStatsUI()
-                end
                 
                 local diffTrait = currentTrait - lastTrait
                 local diffPerfect = currentPerfect - lastPerfect
