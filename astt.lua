@@ -353,6 +353,10 @@ local Locales = {
         AF_Daily = "Auto Claim Daily Rewards", AF_DailyD = "Claims daily login rewards.",
         AF_Bun = "Auto Claim Free Bundle", AF_BunD = "Claims the free bundle in shop.",
         AF_Quest = "Auto Quest", AF_QuestD = "Auto accepts and claims quests.",
+        AF_Baras = "Auto Baras Event", AF_BarasD = "Auto matchmake for Baras and auto-leave if loss/disconnect.",
+        AF_BarasQ = "Queueing for Baras Matchmaking...",
+        AF_BarasOut = "A player left Baras! Auto returning to lobby...",
+        AF_MatchLost = "Match lost! Returning to lobby...",
         AF_Master = "ENABLE MASTER AUTO FARM", AF_MasterD = "Turns on the entire Auto Farm logic.",
         
         PriCfg = "Task Priority", PriCfgD = "Configure which auto farm tasks have priority over others. If a task has no work to do, it will fallback to the next priority. If all tasks are done, it defaults to Auto Farm Map.",
@@ -452,6 +456,10 @@ local Locales = {
         AF_Daily = "Tự động Nhận Quà Đăng nhập", AF_DailyD = "Nhận quà điểm danh hàng ngày.",
         AF_Bun = "Tự động Nhận Quà Miễn phí", AF_BunD = "Nhận gói quà Free trong Shop.",
         AF_Quest = "Tự động Làm Nhiệm vụ", AF_QuestD = "Tự động nhận và trả nhiệm vụ.",
+        AF_Baras = "Tự động Cày Baras", AF_BarasD = "Tự bật Find Match & Tự leave khi có ng out/thua.",
+        AF_BarasQ = "Đang tìm trận Baras...",
+        AF_BarasOut = "Có người thoát khỏi map Baras! Tự động về Lobby...",
+        AF_MatchLost = "Trận đấu thất bại! Đang thoát về Lobby...",
         AF_Master = "BẬT MASTER AUTO FARM (TRẠNG THÁI CHÍNH)", AF_MasterD = "Công tắc tổng. Bật cái này thì mọi chuỗi Auto mới bắt đầu chạy.",
         
         PriCfg = "Cài đặt Mức độ Ưu tiên", PriCfgD = "Tuỳ chỉnh xem cái nào chạy trước, cái nào chạy sau. Nếu cái số 1 không có gì để làm, nó sẽ làm cái số 2. Nếu xong hết, nó sẽ tự động tạo map đi farm.",
@@ -1139,6 +1147,7 @@ local friendToggle = Tabs.AutoFarm:AddToggle("FriendsOnly", { Title = L.AF_Frien
 local AutoClaimDaily = Tabs.AutoFarm:AddToggle("AutoClaimDaily", { Title = L.AF_Daily, Description = L.AF_DailyD, Default = false })
 local AutoClaimBundle = Tabs.AutoFarm:AddToggle("AutoClaimBundle", { Title = L.AF_Bun, Description = L.AF_BunD, Default = false })
 local AutoQuest = Tabs.AutoFarm:AddToggle("AutoQuest", { Title = L.AF_Quest, Description = L.AF_QuestD, Default = false })
+local AutoBaras = Tabs.AutoFarm:AddToggle("AutoBaras", { Title = L.AF_Baras, Description = L.AF_BarasD, Default = false })
 local AutoToggle = Tabs.AutoFarm:AddToggle("MasterAutoRun", { Title = L.AF_Master, Description = L.AF_MasterD, Default = false })
 local function handleDisconnectPrompt(child)
     if child.Name ~= "ErrorPrompt" then return end
@@ -1919,6 +1928,29 @@ if isLobby then
             end
             
             if Options.MasterAutoRun.Value and get_challenges and create_room and not (Options.PartyMode and Options.PartyMode.Value and Options.PartyRole.Value == "Member") then
+                if Options.AutoBaras and Options.AutoBaras.Value then
+                    Fluent:Notify({ Title = "Baras Event", Content = L.AF_BarasQ, Duration = 3 })
+                    pcall(function()
+                        local Event = game:GetService("ReplicatedStorage").Remotes.Play.create_room
+                        Event:InvokeServer({
+                            difficulty = "Normal",
+                            mode = "Event",
+                            world = "Cosmic Throne Hall",
+                            act = 1
+                        })
+                        task.wait(1)
+                        local FindEvent = game:GetService("ReplicatedStorage").Remotes.Matchmaking.find_match
+                        FindEvent:InvokeServer({
+                            difficulty = "Normal",
+                            mode = "Event",
+                            world = "Cosmic Throne Hall",
+                            act = 1
+                        })
+                    end)
+                    task.wait(5)
+                    continue
+                end
+                
                 local succ, challengeData = pcall(function() return get_challenges:InvokeServer() end)
                 local joinedSomething = false
                 
@@ -2065,9 +2097,21 @@ else
         end)
     end
     
+    local maxPlayersSeen = #game.Players:GetPlayers()
+    game.Players.PlayerAdded:Connect(function()
+        maxPlayersSeen = math.max(maxPlayersSeen, #game.Players:GetPlayers())
+    end)
+    
     game.Players.PlayerRemoving:Connect(function(player)
         if Options.PartyMode and Options.PartyMode.Value and Options.PartyLeaveSync and Options.PartyLeaveSync.Value then
             forceTeleportToLobby("Party Sync", "Player " .. player.Name .. " left the match! Returning to lobby...")
+        end
+        if Options.AutoBaras and Options.AutoBaras.Value then
+            task.delay(1, function()
+                if maxPlayersSeen >= 4 and #game.Players:GetPlayers() < 4 then
+                    forceTeleportToLobby("Auto Baras", L.AF_BarasOut)
+                end
+            end)
         end
     end)
 
@@ -2275,18 +2319,24 @@ else
                         saveSessionStats()
                         updateStatsUI()
                         
-                        if Options.WebhookOnMatchEnd and Options.WebhookOnMatchEnd.Value and type(sendWebhookData) == "function" then
-                            local matchStatus = "WIN"
-                            for _, child in pairs(endScreen:GetDescendants()) do
-                                if child:IsA("TextLabel") then
-                                    local text = string.lower(child.Text)
-                                    if string.find(text, "defeat") or string.find(text, "lose") or string.find(text, "fail") then
-                                        matchStatus = "LOSS"
-                                        break
-                                    end
+                        local matchStatus = "WIN"
+                        for _, child in pairs(endScreen:GetDescendants()) do
+                            if child:IsA("TextLabel") then
+                                local text = string.lower(child.Text)
+                                if string.find(text, "defeat") or string.find(text, "lose") or string.find(text, "fail") then
+                                    matchStatus = "LOSS"
+                                    break
                                 end
                             end
+                        end
+                        
+                        if Options.WebhookOnMatchEnd and Options.WebhookOnMatchEnd.Value and type(sendWebhookData) == "function" then
                             sendWebhookData(matchStatus)
+                        end
+                        
+                        if matchStatus == "LOSS" then
+                            Fluent:Notify({ Title = "Match Lost", Content = L.AF_MatchLost, Duration = 3 })
+                            pcall(function() forceTeleportToLobby("Match Lost", L.AF_MatchLost) end)
                         end
                     end
                     
