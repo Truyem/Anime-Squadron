@@ -918,16 +918,18 @@ task.spawn(function()
             }
             
             local tempItems = {}
-            for k, _ in pairs(whitelist) do
-                table.insert(tempItems, k)
-            end
-            
-            local folder = rep:WaitForChild("Items", 30)
-            if folder then
-                for _, v in ipairs(folder:GetChildren()) do
-                    local name = v.Name
-                    if not whitelist[name] and not blacklist[name] and not string.find(name, "XP") and not string.find(name, "Coin") then
-                        if not table.find(tempItems, name) then table.insert(tempItems, name) end
+            for _, folderName in ipairs({"Items", "Materials"}) do
+                local folder = rep:WaitForChild(folderName, 30)
+                if folder then
+                    for _, v in ipairs(folder:GetChildren()) do
+                        local name = v.Name
+                        if whitelist[name] then
+                            if not table.find(tempItems, name) then table.insert(tempItems, name) end
+                        else
+                            if not blacklist[name] and not string.find(name, "XP") and not string.find(name, "Coin") then
+                                if not table.find(tempItems, name) then table.insert(tempItems, name) end
+                            end
+                        end
                     end
                 end
             end
@@ -1274,14 +1276,25 @@ SaveManager:BuildConfigSection(Tabs.Settings)
 
 Window:SelectTab(1)
 
-pcall(function()
-    SaveManager:Load("AutoSave")
-
+local ConfigLoaded = false
+task.spawn(function()
+    for i = 1, 10 do
+        local succ, err = pcall(function()
+            SaveManager:Load("AutoSave")
+        end)
+        if succ then
+            ConfigLoaded = true
+            break
+        end
+        task.wait(1)
+    end
+    ConfigLoaded = true
 end)
 
 local saveDebounce = false
 for name, option in pairs(Fluent.Options) do
     option:OnChanged(function()
+        if not ConfigLoaded then return end
         if not saveDebounce then
             saveDebounce = true
             task.delay(2, function()
@@ -2600,10 +2613,15 @@ local function createMobileToggle()
     if not pcall(function() local _ = guiParent.Name end) then
         guiParent = game:GetService("Players").LocalPlayer:WaitForChild("PlayerGui")
     end
-    if guiParent:FindFirstChild("FluentMobileToggle") then return end
+    
+    local oldGui = guiParent:FindFirstChild("FluentMobileToggle")
+    if oldGui then
+        pcall(function() oldGui:Destroy() end)
+    end
 
     local ScreenGui = Instance.new("ScreenGui")
     ScreenGui.Name = "FluentMobileToggle"
+    ScreenGui.ResetOnSpawn = false
     ScreenGui.Parent = guiParent
     ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 
