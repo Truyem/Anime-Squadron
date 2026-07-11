@@ -379,7 +379,8 @@ local Locales = {
         
         WbCfg = "Discord Webhook", WbCfgD = "Automatic status reporter.",
         WbUrl = "Webhook URL", WbUrlD = "Link to your discord webhook.",
-        WbDrop = "Send on Item Drop (Traits/Cubes)", WbDropD = "Alerts you when rare items drop.",
+        WbDrop = "Send on Item Drop (Traits/Cubes)", WbDropD = "Alerts when Trait Shards / Cubes / Gold / Gems drop.",
+        WbUnitDrop = "Send on Unit Drop", WbUnitDropD = "Alerts when a new unit is rolled/dropped.",
         WbMatch = "Send on Match End (Win/Loss)", WbMatchD = "Sends match results.",
         WbInt = "Send on Interval", WbIntD = "Sends periodic summary.",
         WbEvo = "Send on Evo/Craft (Success/Fail)", WbEvoD = "Alerts on craft results.",
@@ -482,7 +483,8 @@ local Locales = {
         
         WbCfg = "Thông báo Discord (Webhook)", WbCfgD = "Bot tự động gửi báo cáo cày cuốc.",
         WbUrl = "Link Webhook", WbUrlD = "Dán link Discord Webhook của bạn vào đây.",
-        WbDrop = "Báo cáo Rớt đồ (Traits/Cubes)", WbDropD = "Gửi thông báo khi bạn nhặt được đồ hiếm.",
+        WbDrop = "Báo cáo Rớt đồ (Traits/Cubes)", WbDropD = "Gửi thông báo khi Trait Shards / Cubes / Gold / Gems tăng.",
+        WbUnitDrop = "Báo cáo Rớt Unit", WbUnitDropD = "Gửi thông báo khi có unit mới được roll/rớt.",
         WbMatch = "Báo cáo Hết Trận (Thắng/Thua)", WbMatchD = "Gửi thống kê sau mỗi ván chơi.",
         WbInt = "Báo cáo Định kỳ", WbIntD = "Gửi tóm tắt tình trạng cày cuốc theo chu kỳ.",
         WbEvo = "Báo cáo Tiến hoá/Ghép", WbEvoD = "Gửi thông báo khi Ghép đồ Thành công hay Thất bại.",
@@ -1265,7 +1267,8 @@ end
 
 Tabs.Webhook:AddParagraph({ Title = L.WbCfg, Content = L.WbCfgD })
 local WebhookURL = Tabs.Webhook:AddInput("WebhookURL", { Title = L.WbUrl, Description = L.WbUrlD, Default = "", Numeric = false, Finished = false, Placeholder = "https://discord.com/api/webhooks/..." })
-local WebhookOnDrop = Tabs.Webhook:AddToggle("WebhookOnDrop", { Title = L.WbDrop, Description = L.WbDropD, Default = false })
+local WebhookOnItemDrop = Tabs.Webhook:AddToggle("WebhookOnItemDrop", { Title = L.WbDrop, Description = L.WbDropD, Default = false })
+local WebhookOnUnitDrop = Tabs.Webhook:AddToggle("WebhookOnUnitDrop", { Title = L.WbUnitDrop, Description = L.WbUnitDropD, Default = false })
 local WebhookOnMatchEnd = Tabs.Webhook:AddToggle("WebhookOnMatchEnd", { Title = L.WbMatch, Description = L.WbMatchD, Default = false })
 local WebhookOnInterval = Tabs.Webhook:AddToggle("WebhookOnInterval", { Title = L.WbInt, Description = L.WbIntD, Default = false })
 local WebhookOnEvoCraft = Tabs.Webhook:AddToggle("WebhookOnEvoCraft", { Title = L.WbEvo, Description = L.WbEvoD, Default = false })
@@ -2413,7 +2416,7 @@ end
     local strGold = tostring(gold)
     local droppedItems = {}
     
-    if status == "DROP" and type(diffs) == "table" then
+    if (status == "DROP" or status == "UNIT_DROP") and type(diffs) == "table" then
         if diffs.trait and diffs.trait > 0 then
             table.insert(droppedItems, "Trait Shards +" .. diffs.trait)
             strTrait = tostring(traitShards - diffs.trait) .. " + " .. diffs.trait
@@ -2428,7 +2431,8 @@ end
         end
         if diffs.units and type(diffs.units) == "table" and #diffs.units > 0 then
             for _, unitName in ipairs(diffs.units) do
-                table.insert(droppedItems, "Unit Drop: " .. tostring(unitName))
+                local shinyTag = (type(unitName) == "table" and unitName.shiny == true) and " ✨ Shiny" or " ⚔️ Normal"
+                table.insert(droppedItems, "Unit Drop: " .. tostring(unitName) .. shinyTag)
             end
         end
         if diffs.items and type(diffs.items) == "table" then
@@ -2467,6 +2471,12 @@ end
         statusText = "Item Dropped!"
         if #droppedItems > 0 then
             statusText = "Item Dropped! (" .. table.concat(droppedItems, ", ") .. ")"
+        end
+    elseif status == "UNIT_DROP" then
+        embedColor = 16753920
+        statusText = "Unit Dropped!"
+        if #droppedItems > 0 then
+            statusText = "Unit Dropped! (" .. table.concat(droppedItems, ", ") .. ")"
         end
     elseif status == "EVO_SUCCESS" then
         embedColor = 65280
@@ -2640,15 +2650,30 @@ task.spawn(function()
                     saveSessionStats()
                     updateStatsUI()
                     
-                    if Options.WebhookOnDrop and Options.WebhookOnDrop.Value and Options.WebhookURL and Options.WebhookURL.Value ~= "" then
+                    local wantItemDrop = Options.WebhookOnItemDrop and Options.WebhookOnItemDrop.Value
+                    local wantUnitDrop = Options.WebhookOnUnitDrop and Options.WebhookOnUnitDrop.Value
+                    local webhookURL = Options.WebhookURL and Options.WebhookURL.Value ~= ""
+                    
+                    if webhookURL and wantItemDrop and hasItemDiff then
                         sendWebhookData("DROP", {
                             trait = diffItems["Trait Shards"] or 0,
                             perfect = diffItems["Perfect Cubes"] or 0,
                             reroll = diffItems["Reroll Cubes"] or 0,
-                            units = droppedUnits,
+                            units = {},
                             items = diffItems
                         })
-                        task.wait(10)
+                        task.wait(5)
+                    end
+                    
+                    if webhookURL and wantUnitDrop and #droppedUnits > 0 then
+                        sendWebhookData("UNIT_DROP", {
+                            trait = 0,
+                            perfect = 0,
+                            reroll = 0,
+                            units = droppedUnits,
+                            items = {}
+                        })
+                        task.wait(5)
                     end
                 end
             end
