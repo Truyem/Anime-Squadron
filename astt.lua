@@ -1612,7 +1612,7 @@ if isLobby then
                             end
                         elseif string.find(lowerName, "boss") or string.find(lowerName, "kill") or string.find(lowerName, "story") or string.find(lowerName, "any") or string.find(lowerName, "clear") then
                             if not activeQuestMap then
-                                activeQuestMap = { act = 1, diff = "Normal", mode = "Story", world = "Ninja Village" }
+                                activeQuestMap = { act = 1, diff = "Normal", mode = "Story", world = "GT City", boosted = true, only_friends = false }
                             end
                             table.insert(activeQuestTexts, string.format("Quest: %s [%d/%d]", v.name, v.progress, v.required))
                             needToMap = true
@@ -1991,7 +1991,7 @@ if isLobby then
                         Fluent:Notify({ Title = "Auto Farm", Content = "Farming Material: " .. tostring(activeQuestMap.matName), Duration = 3 })
                         joinRoom(activeQuestMap.act, activeQuestMap.diff, activeQuestMap.mode, activeQuestMap.world, nil, activeQuestMap.matName, activeQuestMap.maxCap, "Item")
                     elseif activeQuestMap.mode == "Story" then
-                        Fluent:Notify({ Title = "Auto Quest", Content = "Joining Ninja Village Act 1 for Quest!", Duration = 3 })
+                        Fluent:Notify({ Title = "Auto Quest", Content = "Joining GT City Act 1 for Quest!", Duration = 3 })
                         joinRoom(activeQuestMap.act, activeQuestMap.diff, activeQuestMap.mode, activeQuestMap.world, nil, nil, nil)
                     end
                 elseif handled then
@@ -2430,10 +2430,13 @@ end
             strReroll = tostring(rerollCubes - diffs.reroll) .. " + " .. diffs.reroll
         end
         if diffs.units and type(diffs.units) == "table" and #diffs.units > 0 then
-            for _, unitName in ipairs(diffs.units) do
-                local shinyTag = (type(unitName) == "table" and unitName.shiny == true) and " ✨ Shiny" or " ⚔️ Normal"
-                table.insert(droppedItems, "Unit Drop: " .. tostring(unitName) .. shinyTag)
+            local unitParts = {}
+            for _, unitObj in ipairs(diffs.units) do
+                local unitName = type(unitObj) == "table" and (unitObj.name or "Unknown") or tostring(unitObj)
+                local shinyTag = (type(unitObj) == "table" and unitObj.shiny == true) and " (Shiny)" or " (Normal)"
+                table.insert(unitParts, unitName .. shinyTag)
             end
+            table.insert(droppedItems, "Unit Drop: " .. table.concat(unitParts, ", "))
         end
         if diffs.items and type(diffs.items) == "table" then
             if diffs.items["Gems"] and diffs.items["Gems"] > 0 then
