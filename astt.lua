@@ -286,7 +286,7 @@ end)
 local Locales = {
     EN = {
         WinTitle = "🇻🇳 Free HUB", WinSub = "Anime Squadron",
-        TabAutoFarm = "Auto Farm", TabPriority = "Priority Settings", TabMaps = "Trait Maps", TabEvo = "Evo & Craft", TabReroll = "Auto Reroll", TabShop = "Shop & Upgrades", TabClaims = "Claims & Misc", TabSniper = "Challenge Sniper", TabIngame = "Ingame Helper", TabParty = "Party & Multi", TabWebhook = "Webhook", TabSettings = "Settings",
+        TabAutoFarm = "Auto Farm", TabPriority = "Priority Settings", TabMaps = "Trait Maps", TabEvo = "Evo & Craft", TabReroll = "Auto Reroll", TabShop = "Shop & Upgrades", TabClaims = "Claims & Misc", TabSniper = "Challenge Sniper", TabIngame = "Ingame Helper", TabParty = "Party & Multi", TabWebhook = "Webhook", TabVisual = "Visual Effect", TabSettings = "Settings",
         
         StuckAutoHop = "Auto Server Hop (Stuck Failsafe)", StuckAutoHopD = "Automatically hops to another server if stuck in the Lobby for too long.",
         StuckTimeout = "Stuck Timeout (Seconds)", StuckTimeoutD = "Time in seconds before hopping.",
@@ -386,11 +386,16 @@ local Locales = {
         WbEvo = "Send on Evo/Craft (Success/Fail)", WbEvoD = "Alerts on craft results.",
         WbTime = "Interval (Minutes)", WbTimeD = "How often to send summary.",
         
+        VisualCfg = "Visual Effect Loader", VisualCfgD = "Lobby only. Loads the local visual fake trait/summon UI without merging it into this hub.",
+        VisualLoad = "Open Visual Effect", VisualLoadD = "Load FakeTraitReroll.lua once. It cannot be opened twice to avoid duplicate UI/hooks.",
+        VisualLobbyOnly = "Lobby Only", VisualLobbyOnlyD = "This visual tool only works in the Lobby.",
+        VisualLoaded = "Visual Effect Loaded", VisualLoadedD = "The visual effect script is already loaded.",
+        VisualLoading = "Loading Visual Effect", VisualLoadingD = "Opening the visual effect script...",
         SetLang = "Language / Ngôn ngữ", SetLangD = "Select UI language. Tắt Script đi mở lại để áp dụng!"
     },
     VN = {
         WinTitle = "🇻🇳 Free HUB", WinSub = "Anime Squadron",
-        TabAutoFarm = "Auto Farm", TabPriority = "Cài đặt Ưu tiên", TabMaps = "Bản đồ Trait", TabEvo = "Tiến hoá & Ghép", TabReroll = "Auto Đập Chỉ số", TabShop = "Cửa hàng & Nâng cấp", TabClaims = "Nhận thưởng & Code", TabSniper = "Săn Challenge", TabIngame = "Hỗ trợ Trong Game", TabParty = "Tổ đội (Nhiều Acc)", TabWebhook = "Thông báo Webhook", TabSettings = "Cài đặt (Settings)",
+        TabAutoFarm = "Auto Farm", TabPriority = "Cài đặt Ưu tiên", TabMaps = "Bản đồ Trait", TabEvo = "Tiến hoá & Ghép", TabReroll = "Auto Đập Chỉ số", TabShop = "Cửa hàng & Nâng cấp", TabClaims = "Nhận thưởng & Code", TabSniper = "Săn Challenge", TabIngame = "Hỗ trợ Trong Game", TabParty = "Tổ đội (Nhiều Acc)", TabWebhook = "Thông báo Webhook", TabVisual = "Hiệu ứng Ảo", TabSettings = "Cài đặt (Settings)",
         
         StuckAutoHop = "BẬT Tự động Đổi Server (Chống Kẹt)", StuckAutoHopD = "Tự động tìm server khác nếu kẹt ở Sảnh quá lâu.",
         StuckTimeout = "Thời gian chờ Kẹt (Giây)", StuckTimeoutD = "Số giây kẹt trước khi đổi server.",
@@ -490,6 +495,11 @@ local Locales = {
         WbEvo = "Báo cáo Tiến hoá/Ghép", WbEvoD = "Gửi thông báo khi Ghép đồ Thành công hay Thất bại.",
         WbTime = "Chu kỳ Báo cáo (Phút)", WbTimeD = "Cứ sau bao nhiêu phút thì gửi 1 báo cáo tổng hợp.",
         
+        VisualCfg = "Trình mở Hiệu ứng Ảo", VisualCfgD = "Chỉ chạy ở Lobby. Mở UI fake trait/summon visual riêng, không gộp vào hub này.",
+        VisualLoad = "Mở Hiệu ứng Ảo", VisualLoadD = "Load FakeTraitReroll.lua một lần. Không cho mở lần 2 để tránh trùng UI/hook.",
+        VisualLobbyOnly = "Chỉ chạy ở Lobby", VisualLobbyOnlyD = "Công cụ visual này chỉ hoạt động khi đang ở sảnh.",
+        VisualLoaded = "Đã mở Hiệu ứng Ảo", VisualLoadedD = "Script visual đã được load rồi.",
+        VisualLoading = "Đang mở Hiệu ứng Ảo", VisualLoadingD = "Đang load script visual...",
         SetLang = "Language / Ngôn ngữ", SetLangD = "Choose language. Tắt Script đi mở lại để áp dụng / Restart Script to apply!"
     }
 }
@@ -518,10 +528,45 @@ local Tabs = {
     Ingame = Window:AddTab({ Title = L.TabIngame, Icon = "swords" }),
     PartyMulti = Window:AddTab({ Title = L.TabParty, Icon = "users" }),
     Webhook = Window:AddTab({ Title = L.TabWebhook, Icon = "link" }),
+    VisualEffect = Window:AddTab({ Title = L.TabVisual, Icon = "sparkles" }),
     Settings = Window:AddTab({ Title = L.TabSettings, Icon = "settings" })
 }
 
 local Options = Fluent.Options
+
+Tabs.VisualEffect:AddParagraph({
+    Title = L.VisualCfg,
+    Content = isLobby and L.VisualCfgD or L.VisualLobbyOnlyD
+})
+
+Tabs.VisualEffect:AddButton({
+    Title = L.VisualLoad,
+    Description = L.VisualLoadD,
+    Callback = function()
+        if not isLobby then
+            Fluent:Notify({ Title = L.VisualLobbyOnly, Content = L.VisualLobbyOnlyD, Duration = 4 })
+            return
+        end
+
+        if _G.ASFakeTraitReroll_VisualLoaded then
+            Fluent:Notify({ Title = L.VisualLoaded, Content = L.VisualLoadedD, Duration = 4 })
+            return
+        end
+
+        _G.ASFakeTraitReroll_VisualLoaded = true
+        Fluent:Notify({ Title = L.VisualLoading, Content = L.VisualLoadingD, Duration = 3 })
+
+        local ok, err = pcall(function()
+            loadstring(game:HttpGet("https://cdn.jsdelivr.net/gh/Truyem/Anime-Squadron@main/FakeTraitReroll.lua"))()
+        end)
+
+        if not ok then
+            _G.ASFakeTraitReroll_VisualLoaded = false
+            warn("[AnimeSquadron] Failed to load visual effect script:", err)
+            Fluent:Notify({ Title = "Visual Effect", Content = tostring(err), Duration = 5 })
+        end
+    end
+})
 
 local itemsList = {"Trait Shards", "Reroll Cubes", "Perfect Cubes", "Gems", "Gold"}
 
@@ -2769,5 +2814,3 @@ local function createMobileToggle()
     end)
 end
 createMobileToggle()
-
-
