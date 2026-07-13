@@ -557,7 +557,7 @@ Tabs.VisualEffect:AddButton({
         Fluent:Notify({ Title = L.VisualLoading, Content = L.VisualLoadingD, Duration = 3 })
 
         local ok, err = pcall(function()
-            loadstring(game:HttpGet("https://cdn.jsdelivr.net/gh/Truyem/Anime-Squadron@main/FakeTraitReroll.lua"))()
+            loadstring(game:HttpGet("https://cdn.jsdelivr.net/gh/Truyem/Anime-Squadron@main/Fake.lua"))()
         end)
 
         if not ok then
