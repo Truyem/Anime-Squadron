@@ -54,7 +54,7 @@ local state = {
     fakeSummonBanner = "Basic Banner",
     fakeSummonUnits = "Gometa (SSJ4),Fastwagon,Ramuru",
     fakeSummonShiny = "",
-    visualEnabled = false,
+    visualEnabled = true,
     fakeUnits = {}
 }
 
