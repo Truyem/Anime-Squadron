@@ -851,6 +851,8 @@ local function applyFakeTrait(trait, subTrait)
 end
 
 local rolling = false
+local autoRolling = false
+local fakeRollProgress = 0
 local function pickRandomTrait(except, except2, except3)
     if #allTraits == 0 then return except end
     for _ = 1, 20 do
@@ -879,38 +881,54 @@ local function pickRandomSubTrait(mainTrait, finalSubTrait, isFinal, excludedMai
     return sub
 end
 
-local function fakeRoll()
+local function fakeRollStep()
     if rolling then return end
     rolling = true
 
     local target = state.targetTrait
     local targetSubTrait = normalizeSubTrait(state.targetSubTrait)
     local rolls = math.max(1, tonumber(state.rollsToHit) or 1)
-    local finalSubTrait = targetSubTrait
 
-    for i = 1, rolls do
-        local trait = (i == rolls) and target or pickRandomTrait(target, targetSubTrait)
-        local subTrait = pickRandomSubTrait(trait, targetSubTrait, i == rolls, target, targetSubTrait)
-        if i == rolls then finalSubTrait = subTrait end
-        if TraitsUI then
-            applyTraitToFrame(TraitsUI:FindFirstChild("Trait"), trait)
-            local sub = TraitsUI:FindFirstChild("Sub-Trait")
-            if sub then
-                if subTrait then
-                    applyTraitToFrame(sub, subTrait)
-                else
-                    sub.Visible = false
-                    if sub:FindFirstChild("Frame") then sub.Frame.Visible = false end
-                end
+    fakeRollProgress = math.clamp(fakeRollProgress + 1, 1, rolls)
+    local isFinal = fakeRollProgress >= rolls
+    local trait = isFinal and target or pickRandomTrait(target, targetSubTrait)
+    local subTrait = pickRandomSubTrait(trait, targetSubTrait, isFinal, target, targetSubTrait)
+
+    if TraitsUI then
+        applyTraitToFrame(TraitsUI:FindFirstChild("Trait"), trait)
+        local sub = TraitsUI:FindFirstChild("Sub-Trait")
+        if sub then
+            if subTrait then
+                applyTraitToFrame(sub, subTrait)
+            else
+                sub.Visible = false
+                if sub:FindFirstChild("Frame") then sub.Frame.Visible = false end
             end
-            hideTraitBuffText()
-            spendFakeTraitShards(state.shardCostPerRoll or 1)
         end
-        task.wait(tonumber(state.rollDelay) or 0.16)
+        hideTraitBuffText()
+        spendFakeTraitShards(state.shardCostPerRoll or 1)
     end
 
-    applyFakeTrait(target, finalSubTrait)
+    if isFinal then
+        applyFakeTrait(target, subTrait)
+        fakeRollProgress = 0
+    end
+
     rolling = false
+    return isFinal
+end
+
+local function fakeRoll()
+    if autoRolling then return end
+    autoRolling = true
+
+    repeat
+        local done = fakeRollStep()
+        if done then break end
+        task.wait(tonumber(state.rollDelay) or 0.16)
+    until not autoRolling
+
+    autoRolling = false
 end
 
 local function enforceSelectedFakeTrait()
@@ -1160,6 +1178,12 @@ local function updateVisualBlockers()
     local traitBlocker = traitReroll and traitReroll:FindFirstChild("ASFakeBlocker")
     if traitBlocker and traitBlocker:IsA("GuiObject") then
         traitBlocker.Visible = state.visualEnabled == true
+    end
+
+    local autoRoll = traitsButtons and traitsButtons:FindFirstChild("Auto_Roll")
+    local autoBlocker = autoRoll and autoRoll:FindFirstChild("ASFakeAutoBlocker")
+    if autoBlocker and autoBlocker:IsA("GuiObject") then
+        autoBlocker.Visible = state.visualEnabled == true
     end
 
     local summonUI = Menus and Menus:FindFirstChild("Summon")
@@ -1599,6 +1623,37 @@ local function installSummonBlocker()
     end
 end
 
+local function installTraitRemoteBlocker()
+    local remotes = ReplicatedStorage:FindFirstChild("Remotes")
+    local traits = remotes and remotes:FindFirstChild("Traits")
+    local rerollRemote = traits and traits:FindFirstChild("reroll")
+    local switchAutoRemote = traits and traits:FindFirstChild("switch_auto")
+
+    if hookmetamethod and not _G.ASFakeTrait_RemoteHooked then
+        _G.ASFakeTrait_RemoteHooked = true
+        local old
+        local hookFn = function(self, ...)
+            local method = getnamecallmethod()
+            if _G.ASFakeTraitReroll_VisualEnabled == true and method == "InvokeServer" then
+                if self == rerollRemote then
+                    task.spawn(fakeRollStep)
+                    return false
+                elseif self == switchAutoRemote then
+                    local _, enabled = ...
+                    if enabled == true then
+                        task.spawn(fakeRoll)
+                    else
+                        autoRolling = false
+                    end
+                    return false
+                end
+            end
+            return old(self, ...)
+        end
+        old = hookmetamethod(game, "__namecall", newcclosure and newcclosure(hookFn) or hookFn)
+    end
+end
+
 local function makeText(parent, text, size, pos)
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
@@ -1994,15 +2049,38 @@ local function installRerollBlocker()
     blocker.Parent = real
     blocker.Activated:Connect(function()
         if state.visualEnabled == true then
-            fakeRoll()
+            fakeRollStep()
         end
     end)
+
+    local auto = buttons:FindFirstChild("Auto_Roll")
+    if auto then
+        local oldAuto = auto:FindFirstChild("ASFakeAutoBlocker")
+        if oldAuto then oldAuto:Destroy() end
+
+        local autoBlocker = Instance.new("TextButton")
+        autoBlocker.Name = "ASFakeAutoBlocker"
+        autoBlocker.AutoButtonColor = false
+        autoBlocker.BackgroundTransparency = 1
+        autoBlocker.Text = ""
+        autoBlocker.Visible = state.visualEnabled == true
+        autoBlocker.Size = UDim2.fromScale(1, 1)
+        autoBlocker.Position = UDim2.fromScale(0, 0)
+        autoBlocker.ZIndex = (auto.ZIndex or 1) + 10
+        autoBlocker.Parent = auto
+        autoBlocker.Activated:Connect(function()
+            if state.visualEnabled == true then
+                fakeRoll()
+            end
+        end)
+    end
 end
 
 if not _G.ASFakeTraitReroll_NoOverlay then
     createOverlay()
 end
 installRerollBlocker()
+installTraitRemoteBlocker()
 installSummonBlocker()
 updateVisualBlockers()
 startEnforcer()
@@ -2028,6 +2106,7 @@ _G.ASFakeTraitReroll = {
     end,
     SetRolls = function(amount)
         state.rollsToHit = math.max(1, tonumber(amount) or state.rollsToHit or 1)
+        fakeRollProgress = 0
         saveState()
     end,
     SetRollDelay = function(seconds)
@@ -2070,6 +2149,7 @@ _G.ASFakeTraitReroll = {
         saveState()
     end,
     FakeSummon = fakeSummon,
+    Step = fakeRollStep,
     Roll = fakeRoll,
     Apply = applyFakeTrait,
     Open = createOverlay,
