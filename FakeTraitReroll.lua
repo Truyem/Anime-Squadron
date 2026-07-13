@@ -1060,6 +1060,98 @@ local fakeSummoning = false
 local fakeSummonOpenedAt = 0
 local fakeSummonCloseConnection
 
+local function hideFakeSummonOverlays(priority)
+    priority = priority or PlayerGui:FindFirstChild("Priority")
+    if not priority then return end
+    for _, name in ipairs({ "ASFakeSummonTitle", "ASFakeSummonCloseHint", "ASFakeSummonDimBand", "ASFakeSummonCloseLayer" }) do
+        local gui = priority:FindFirstChild(name)
+        if gui and gui:IsA("GuiObject") then
+            gui.Visible = false
+        end
+    end
+end
+
+local function closeFakeSummon(skip)
+    if skip then skip.Visible = false end
+    hideFakeSummonOverlays()
+end
+
+local function cloneSummonText(priority, name, template, text, position, size, zIndex)
+    local label = priority:FindFirstChild(name)
+    if not label then
+        label = template and template:Clone() or Instance.new("TextLabel")
+        label.Name = name
+        label.Parent = priority
+    end
+    label.AnchorPoint = Vector2.new(0.5, 0.5)
+    label.Position = position
+    label.Size = size
+    label.BackgroundTransparency = 1
+    label.Text = text
+    label.TextTransparency = 0
+    label.Visible = true
+    label.ZIndex = zIndex
+    if label:IsA("TextLabel") then
+        label.TextScaled = true
+    end
+    return label
+end
+
+local function createCleanSummonCloseHint(priority, template)
+    local old = priority:FindFirstChild("ASFakeSummonCloseHint")
+    if old then old:Destroy() end
+
+    local label = Instance.new("TextLabel")
+    label.Name = "ASFakeSummonCloseHint"
+    label.AnchorPoint = Vector2.new(0.5, 0.5)
+    label.Position = UDim2.fromScale(0.5, 0.9)
+    label.Size = UDim2.fromScale(0.42, 0.045)
+    label.BackgroundTransparency = 1
+    label.Text = "(Click anywhere to close)"
+    label.TextColor3 = Color3.new(1, 1, 1)
+    label.TextStrokeColor3 = Color3.new(0, 0, 0)
+    label.TextStrokeTransparency = 0
+    label.TextScaled = true
+    label.ZIndex = 100
+    label.Visible = true
+    if template and template:IsA("TextLabel") then
+        label.FontFace = template.FontFace
+    else
+        label.Font = Enum.Font.FredokaOne
+    end
+    label.Parent = priority
+    return label
+end
+
+local function installFakeSummonVisualOverlays(priority, skip)
+    local dimBand = priority:FindFirstChild("ASFakeSummonDimBand")
+    if dimBand and dimBand:IsA("GuiObject") then
+        dimBand.Visible = false
+    end
+
+    local template = skip and skip:FindFirstChild("ItemName")
+    if template and template:IsA("TextLabel") then
+        template.Visible = true
+        template.Text = "Units obtained:"
+        template.TextTransparency = 0
+        template.ZIndex = 100
+        local extraTitle = priority:FindFirstChild("ASFakeSummonTitle")
+        if extraTitle and extraTitle:IsA("GuiObject") then
+            extraTitle.Visible = false
+        end
+    else
+        cloneSummonText(priority, "ASFakeSummonTitle", template, "Units obtained:", UDim2.fromScale(0.5, 0.18), UDim2.fromScale(0.36, 0.04), 100)
+    end
+
+    for _, desc in ipairs(priority:GetDescendants()) do
+        if (desc:IsA("TextLabel") or desc:IsA("TextButton")) and desc.Text == "(Click anywhere to close)" and desc.Name ~= "ASFakeSummonCloseHint" then
+            desc.Visible = false
+        end
+    end
+
+    createCleanSummonCloseHint(priority, template)
+end
+
 local function updateVisualBlockers()
     local traitsButtons = TraitsUI and TraitsUI:FindFirstChild("Buttons")
     local traitReroll = traitsButtons and traitsButtons:FindFirstChild("Reroll")
@@ -1288,7 +1380,7 @@ local function installSummonClickAnywhere(skip)
         if not skip or not skip.Parent or not skip.Visible then return end
         if os.clock() - fakeSummonOpenedAt < 0.25 then return end
         if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-            skip.Visible = false
+            closeFakeSummon(skip)
         end
     end)
 end
@@ -1306,8 +1398,7 @@ local function installSummonCloseLayer(priority, skip)
         layer.ZIndex = 9000
         layer.Parent = priority
         layer.Activated:Connect(function()
-            if skip then skip.Visible = false end
-            layer.Visible = false
+            closeFakeSummon(skip)
         end)
     end
     layer.Visible = true
@@ -1324,8 +1415,10 @@ local function showFakeSummonResults(results)
     fakeSummonOpenedAt = os.clock()
     installSummonClickAnywhere(skip)
     installSummonCloseLayer(priority, skip)
+    installFakeSummonVisualOverlays(priority, skip)
     skip.ImageTransparency = 1
-    if skip:FindFirstChild("BG") then skip.BG.BackgroundTransparency = 0.35 end
+    if skip:FindFirstChild("BG") then skip.BG.BackgroundTransparency = 0.25 end
+    if skip:FindFirstChild("Characters") then skip.Characters.BackgroundTransparency = 0.35 end
 
     local oldClose = skip:FindFirstChild("ASFakeClose")
     if oldClose then oldClose:Destroy() end
@@ -1356,7 +1449,7 @@ local function showFakeSummonResults(results)
         clickClose.ZIndex = 5
         clickClose.Parent = skip
         clickClose.Activated:Connect(function()
-            skip.Visible = false
+            closeFakeSummon(skip)
         end)
     end
     clickClose.Visible = true
@@ -1417,7 +1510,7 @@ local function showFakeSummonResults(results)
             if cardButton and cardButton:IsA("GuiButton") and not cardButton:GetAttribute("ASFakeCloseHook") then
                 cardButton:SetAttribute("ASFakeCloseHook", true)
                 cardButton.Activated:Connect(function()
-                    skip.Visible = false
+                    closeFakeSummon(skip)
                 end)
             end
         end
@@ -1438,6 +1531,7 @@ local function fakeSummon(amount)
         local staleSkip = priority and priority:FindFirstChild("Skip_Summon")
         if staleSkip then
             staleSkip.Visible = false
+            hideFakeSummonOverlays(priority)
             local util = getUtility()
             if util then util.clear_frame(staleSkip.Characters.Characters, { "UIListLayout" }) end
         end
