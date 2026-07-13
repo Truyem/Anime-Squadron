@@ -46,7 +46,7 @@ local state = {
     targetTrait = "Superior",
     targetSubTrait = "",
     rollsToHit = 10,
-    rollDelay = 0.08,
+    rollDelay = 0.16,
     fakeTraitShards = 9999,
     shardCostPerRoll = 1,
     subTraitRollChance = 0.35,
@@ -83,6 +83,8 @@ state.fakeTraitShards = tonumber(state.fakeTraitShards) or 9999
 state.shardCostPerRoll = tonumber(state.shardCostPerRoll) or 1
 state.subTraitRollChance = tonumber(state.subTraitRollChance) or 0.35
 state.rollsToHit = tonumber(state.rollsToHit) or 10
+state.rollDelay = tonumber(state.rollDelay) or 0.16
+if state.rollDelay < 0.12 then state.rollDelay = 0.16 end
 state.targetSubTrait = state.targetSubTrait or ""
 state.fakeGems = tonumber(state.fakeGems) or 999999
 state.fakeSummonBanner = state.fakeSummonBanner or "Basic Banner"
@@ -904,7 +906,7 @@ local function fakeRoll()
             hideTraitBuffText()
             spendFakeTraitShards(state.shardCostPerRoll or 1)
         end
-        task.wait(tonumber(state.rollDelay) or 0.08)
+        task.wait(tonumber(state.rollDelay) or 0.16)
     end
 
     applyFakeTrait(target, finalSubTrait)
@@ -1728,6 +1730,18 @@ local function createOverlay()
             end
         })
 
+        Tab:AddInput("ASFakeTrait_RollDelay", {
+            Title = "Roll Delay (Seconds)",
+            Description = "Delay per fake trait roll. Default 0.16; lower is faster.",
+            Default = tostring(state.rollDelay or 0.16),
+            Numeric = true,
+            Finished = false,
+            Callback = function(value)
+                state.rollDelay = math.clamp(tonumber(value) or state.rollDelay or 0.16, 0.05, 2)
+                saveState()
+            end
+        })
+
         Tab:AddInput("ASFakeTrait_Shards", {
             Title = "Fake Trait Shards",
             Description = "Displayed instead of real Trait Shards in reroll UI",
@@ -1877,8 +1891,8 @@ local function createOverlay()
 
     local frame = Instance.new("Frame")
     frame.Name = "Panel"
-    frame.Size = UDim2.fromOffset(270, 245)
-    frame.Position = UDim2.new(1, -285, 0.5, -122)
+    frame.Size = UDim2.fromOffset(270, 285)
+    frame.Position = UDim2.new(1, -285, 0.5, -142)
     frame.BackgroundColor3 = Color3.fromRGB(17, 18, 24)
     frame.BorderSizePixel = 0
     frame.Parent = gui
@@ -1894,7 +1908,10 @@ local function createOverlay()
     makeText(frame, "Rolls", UDim2.fromOffset(80, 20), UDim2.fromOffset(14, 98))
     local rollsBox = makeBox(frame, tostring(state.rollsToHit), UDim2.fromOffset(90, 28), UDim2.fromOffset(14, 120))
 
-    makeText(frame, "Sub Trait can be blank/None. Traits: Endure, Sight, Powerful, Ranger, Tank, Knight, Wealthy, Lethal, Sniper, Juggernaut, Rebirth, Entrepreneur, Cloner, Superior", UDim2.fromOffset(240, 54), UDim2.fromOffset(14, 153))
+    makeText(frame, "Delay", UDim2.fromOffset(80, 20), UDim2.fromOffset(14, 153))
+    local delayBox = makeBox(frame, tostring(state.rollDelay or 0.16), UDim2.fromOffset(90, 28), UDim2.fromOffset(14, 175))
+
+    makeText(frame, "Sub Trait can be blank/None. Traits: Endure, Sight, Powerful, Ranger, Tank, Knight, Wealthy, Lethal, Sniper, Juggernaut, Rebirth, Entrepreneur, Cloner, Superior", UDim2.fromOffset(240, 54), UDim2.fromOffset(14, 215))
 
     local rollBtn = makeButton(frame, "FAKE ROLL", UDim2.fromOffset(110, 32), UDim2.fromOffset(132, 112), Color3.fromRGB(73, 126, 255))
     local applyBtn = makeButton(frame, "APPLY NOW", UDim2.fromOffset(110, 32), UDim2.fromOffset(132, 153), Color3.fromRGB(95, 190, 100))
@@ -1929,16 +1946,24 @@ local function createOverlay()
         saveState()
     end)
 
+    delayBox.FocusLost:Connect(function()
+        state.rollDelay = math.clamp(tonumber(delayBox.Text) or state.rollDelay or 0.16, 0.05, 2)
+        delayBox.Text = tostring(state.rollDelay)
+        saveState()
+    end)
+
     rollBtn.Activated:Connect(function()
         traitBox:ReleaseFocus()
         subTraitBox:ReleaseFocus()
         rollsBox:ReleaseFocus()
+        delayBox:ReleaseFocus()
         fakeRoll()
     end)
 
     applyBtn.Activated:Connect(function()
         traitBox:ReleaseFocus()
         subTraitBox:ReleaseFocus()
+        delayBox:ReleaseFocus()
         applyFakeTrait(state.targetTrait, state.targetSubTrait)
     end)
 
@@ -2003,6 +2028,10 @@ _G.ASFakeTraitReroll = {
     end,
     SetRolls = function(amount)
         state.rollsToHit = math.max(1, tonumber(amount) or state.rollsToHit or 1)
+        saveState()
+    end,
+    SetRollDelay = function(seconds)
+        state.rollDelay = math.clamp(tonumber(seconds) or state.rollDelay or 0.16, 0.05, 2)
         saveState()
     end,
     SetFakeShards = function(amount)
