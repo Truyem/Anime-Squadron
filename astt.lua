@@ -4,6 +4,12 @@ end
 
 local LP = game:GetService("Players").LocalPlayer
 local guiLoaded = LP:WaitForChild("PlayerGui", 30)
+local scriptsLoaded = LP:WaitForChild("Plif not game:IsLoaded() then
+	game.Loaded:Wait()
+end
+
+local LP = game:GetService("Players").LocalPlayer
+local guiLoaded = LP:WaitForChild("PlayerGui", 30)
 local scriptsLoaded = LP:WaitForChild("PlayerScripts", 30)
 local clientLoaded = scriptsLoaded and scriptsLoaded:WaitForChild("Client", 30)
 local utilLoaded = clientLoaded and clientLoaded:WaitForChild("Utility", 30)
@@ -98,43 +104,173 @@ local unitFarmMaps = {}
 local gearFarmTargets = {}
 local unitFarmTargets = {}
 
+
+
+
+local function registerMaterialDrop(rewardName, entry)
+	local cleanName = string.lower(tostring(rewardName))
+	if cleanName == "gems" or cleanName == "xp" or cleanName == "gold" or cleanName == "trait shards" or cleanName == "senzu" or cleanName == "energy" then
+		return
+	end
+	if not _G.MATERIAL_DROPS then
+		_G.MATERIAL_DROPS = {}
+	end
+	local list = _G.MATERIAL_DROPS[cleanName]
+	if not list then
+		list = {}
+		_G.MATERIAL_DROPS[cleanName] = list
+	end
+
+	for _, existing in ipairs(list) do
+		if existing.world == entry.world and existing.mode == entry.mode and existing.difficulty == entry.difficulty then
+			for _, a in ipairs(entry.acts or {}) do
+				if not table.find(existing.acts, a) then
+					table.insert(existing.acts, a)
+				end
+			end
+			return
+		end
+	end
+	table.insert(list, entry)
+end
+
+
+
+
+
+
+
+local function pickMaterialDrop(cleanName)
+	local list = _G.MATERIAL_DROPS and _G.MATERIAL_DROPS[string.lower(tostring(cleanName))]
+	if type(list) ~= "table" or #list == 0 then
+		return nil
+	end
+	local function isSimple(entry)
+		return entry.boss == nil and entry.omitDifficulty ~= true and entry.isCorrupted ~= true
+	end
+	local function chanceOf(entry)
+		local c = tonumber(entry.chance)
+		if c then
+			return c
+		end
+		return 100
+	end
+	local sorted = table.clone(list)
+	table.sort(sorted, function(a, b)
+		local sa, sb = isSimple(a), isSimple(b)
+		if sa ~= sb then
+			return sa
+		end
+		local ca, cb = chanceOf(a), chanceOf(b)
+		if ca ~= cb then
+			return ca > cb
+		end
+		return (a.acts[#a.acts] or 0) > (b.acts[#b.acts] or 0)
+	end)
+	return sorted[1]
+end
+
+
+
+local function normalizeMaterialCache()
+	if type(_G.MATERIAL_DROPS) ~= "table" then
+		_G.MATERIAL_DROPS = {}
+		return
+	end
+	for cleanName, val in pairs(_G.MATERIAL_DROPS) do
+		if type(val) == "table" and val.world and not val[1] then
+			_G.MATERIAL_DROPS[cleanName] = {
+				{
+					world = val.world,
+					mode = val.mode or "Story",
+					difficulty = val.difficulty or "Hard",
+					acts = val.acts or { 1 },
+					chance = val.chance,
+					boss = val.boss,
+					omitDifficulty = val.omitDifficulty,
+					isCorrupted = val.isCorrupted,
+				},
+			}
+		end
+	end
+end
+
 local worldsLoaded, Worlds = pcall(function()
 	return require(Players.LocalPlayer.PlayerScripts.Client.Play.Worlds)
 end)
 
-if worldsLoaded and Worlds then
-	for worldId, world in pairs(Worlds) do
-		if type(worldId) == "number" and world.name and type(world.Rewards) == "table" then
-			joinableMapTree[world.name] = joinableMapTree[world.name] or {}
-			for mode, difficulties in pairs(world.Rewards) do
-				if type(difficulties) == "table" then
-					joinableMapTree[world.name][mode] = joinableMapTree[world.name][mode] or {}
-					for difficulty, acts in pairs(difficulties) do
-						if type(acts) == "table" then
-							joinableMapTree[world.name][mode][difficulty] = joinableMapTree[world.name][mode][difficulty]
-								or {}
-							for act, rewards in pairs(acts) do
-								if type(act) == "number" then
-									joinableMapTree[world.name][mode][difficulty][act] = {}
-									if type(rewards) == "table" then
-										for rewardName, rewardData in pairs(rewards) do
-											local targetMaps
-											if ReplicatedStorage.Gear:FindFirstChild(rewardName) then
-												targetMaps = gearFarmMaps
-											elseif ReplicatedStorage.Characters:FindFirstChild(rewardName) then
-												targetMaps = unitFarmMaps
-											end
-											if targetMaps then
-												targetMaps[rewardName] = targetMaps[rewardName] or {}
-												targetMaps[rewardName][difficulty] = {
-													act = act,
-													difficulty = difficulty,
-													mode = mode,
-													world = world.name,
-													chance = type(rewardData) == "table" and rewardData.chance or nil,
-												}
-											end
-										end
+
+
+local commonWorldsLoaded, CommonWorlds = pcall(function()
+	return require(game:GetService("ReplicatedStorage").Common.Worlds)
+end)
+local _cachedWorldDrops = nil
+
+
+
+
+
+
+local function collectWorldDrops()
+	local drops = {}
+	if not (commonWorldsLoaded and type(CommonWorlds) == "table") then
+		return drops
+	end
+	if _cachedWorldDrops then
+		return _cachedWorldDrops
+	end
+	local function capitalize(s)
+		s = tostring(s)
+		return string.upper(string.sub(s, 1, 1)) .. string.sub(s, 2)
+	end
+	for worldName, mod in pairs(CommonWorlds) do
+		if type(mod) == "table" and type(mod.rewards) == "table" then
+
+			local inferredMode
+			if type(mod.bosses) == "table" then
+				local bkeys = {}
+				for bk in pairs(mod.bosses) do
+					table.insert(bkeys, bk)
+				end
+				if #bkeys == 1 and type(bkeys[1]) == "string" then
+					inferredMode = capitalize(bkeys[1])
+				end
+			end
+			for k1, v1 in pairs(mod.rewards) do
+				if type(v1) == "table" and type(k1) == "string" then
+					local firstSub
+					for sk in pairs(v1) do
+						firstSub = sk
+						break
+					end
+					if type(firstSub) == "number" then
+
+						if inferredMode then
+							for act, rewards in pairs(v1) do
+								if type(act) == "number" and type(rewards) == "table" then
+									table.insert(drops, {
+										world = tostring(worldName),
+										mode = inferredMode,
+										difficulty = tostring(k1),
+										act = act,
+										rewards = rewards,
+									})
+								end
+							end
+						end
+					else
+
+						for difficulty, acts in pairs(v1) do
+							if type(acts) == "table" then
+								for act, rewards in pairs(acts) do
+									if type(act) == "number" and type(rewards) == "table" then
+										table.insert(drops, {
+											world = tostring(worldName),
+											mode = tostring(k1),
+											difficulty = tostring(difficulty),
+											act = act,
+											rewards = rewards,
+										})
 									end
 								end
 							end
@@ -144,8 +280,12 @@ if worldsLoaded and Worlds then
 			end
 		end
 	end
+	_cachedWorldDrops = drops
+	return drops
 end
 
+-- OPT: Removed redundant pre-build of joinable/gear/unit maps.
+-- rebuildJoinableData() below builds the same structures once, after event modules are loaded.
 local eventModules = {}
 local eventModulesLoaded = false
 
@@ -188,47 +328,45 @@ local function rebuildJoinableData()
 	gearFarmMaps = {}
 	unitFarmMaps = {}
 	prismMaps = {}
+	_G.MATERIAL_DROPS = _G.MATERIAL_DROPS or {}
 	if worldsLoaded and Worlds then
 		for worldId, world in pairs(Worlds) do
-			if type(worldId) == "number" and world.name and type(world.Rewards) == "table" then
+			if type(worldId) == "number" and world.name then
 				joinableMapTree[world.name] = joinableMapTree[world.name] or {}
-				for mode, difficulties in pairs(world.Rewards) do
-					if type(difficulties) == "table" then
-						joinableMapTree[world.name][mode] = joinableMapTree[world.name][mode] or {}
-						for difficulty, acts in pairs(difficulties) do
-							if type(acts) == "table" then
-								joinableMapTree[world.name][mode][difficulty] = joinableMapTree[world.name][mode][difficulty]
-									or {}
-								for act, rewards in pairs(acts) do
-									if type(act) == "number" then
-										joinableMapTree[world.name][mode][difficulty][act] = {}
-										if type(rewards) == "table" then
-											for rewardName, rewardData in pairs(rewards) do
-												local targetMaps
-												if ReplicatedStorage.Gear:FindFirstChild(rewardName) then
-													targetMaps = gearFarmMaps
-												elseif ReplicatedStorage.Characters:FindFirstChild(rewardName) then
-													targetMaps = unitFarmMaps
-												end
-												if targetMaps then
-													targetMaps[rewardName] = targetMaps[rewardName] or {}
-													targetMaps[rewardName][difficulty] = {
-														act = act,
-														difficulty = difficulty,
-														mode = mode,
-														world = world.name,
-														chance = type(rewardData) == "table" and rewardData.chance
-															or nil,
-													}
-												end
-											end
-										end
-									end
-								end
-							end
-						end
-					end
-				end
+			end
+		end
+	end
+	for _, drop in ipairs(collectWorldDrops()) do
+		joinableMapTree[drop.world] = joinableMapTree[drop.world] or {}
+		joinableMapTree[drop.world][drop.mode] = joinableMapTree[drop.world][drop.mode] or {}
+		joinableMapTree[drop.world][drop.mode][drop.difficulty] = joinableMapTree[drop.world][drop.mode][drop.difficulty]
+			or {}
+		joinableMapTree[drop.world][drop.mode][drop.difficulty][drop.act] = {}
+		for rewardName, rewardData in pairs(drop.rewards) do
+
+			registerMaterialDrop(rewardName, {
+				world = drop.world,
+				mode = drop.mode,
+				difficulty = drop.difficulty,
+				acts = { drop.act },
+				chance = type(rewardData) == "table" and rewardData.chance or nil,
+			})
+			local targetMaps
+			if ReplicatedStorage.Gear:FindFirstChild(rewardName) then
+				targetMaps = gearFarmMaps
+			elseif ReplicatedStorage.Characters:FindFirstChild(rewardName) then
+				targetMaps = unitFarmMaps
+			end
+			if targetMaps then
+				targetMaps[rewardName] = targetMaps[rewardName] or {}
+				targetMaps[rewardName][drop.mode .. "|" .. drop.difficulty] = {
+					act = drop.act,
+					difficulty = drop.difficulty,
+					mode = drop.mode,
+					world = drop.world,
+					chance = type(rewardData) == "table" and rewardData.chance
+						or nil,
+				}
 			end
 		end
 	end
@@ -241,6 +379,20 @@ local function rebuildJoinableData()
 				rewards = data.rewards,
 				boss = data.boss,
 			}
+
+			if type(data.rewards) == "table" then
+				for rewardName, rewardData in pairs(data.rewards) do
+					registerMaterialDrop(rewardName, {
+						world = ev.world,
+						mode = "Event",
+						difficulty = "Normal",
+						acts = { act },
+						boss = data.boss,
+						omitDifficulty = true,
+						chance = type(rewardData) == "table" and rewardData.chance or nil,
+					})
+				end
+			end
 		end
 		joinableMapTree[ev.name] = node
 	end
@@ -259,6 +411,17 @@ local function rebuildJoinableData()
 					boss = stage.boss,
 					isCorrupted = true,
 				}
+				for rewardName, rewardData in pairs(stage.rewards) do
+					registerMaterialDrop(rewardName, {
+						world = stage.name,
+						mode = "Corrupted",
+						difficulty = "Normal",
+						acts = { 1 },
+						boss = stage.boss,
+						isCorrupted = true,
+						chance = type(rewardData) == "table" and rewardData.chance or nil,
+					})
+				end
 				if stage.rewards.Prism and stage.rewards.Prism.cap then
 					table.insert(prismMaps, {
 						world = stage.name,
@@ -295,26 +458,15 @@ ensureEventModules()
 rebuildJoinableData()
 
 if isLobby then
-	if worldsLoaded and Worlds then
-		for worldId, world in pairs(Worlds) do
-			if type(worldId) == "number" and world.Rewards then
-				for mode, diffs in pairs(world.Rewards) do
-					local diffsToCheck = diffs["Normal"] or diffs["Hard"]
-					if diffsToCheck then
-						for act, drops in pairs(diffsToCheck) do
-							for dropName, dropData in pairs(drops) do
-								if dropName == "Trait Shards" and dropData.cap then
-									table.insert(traitMaps, {
-										world = world.name,
-										mode = mode,
-										act = act,
-										cap = dropData.cap,
-									})
-								end
-							end
-						end
-					end
-				end
+	if commonWorldsLoaded then
+		for _, drop in ipairs(collectWorldDrops()) do
+			if drop.rewards["Trait Shards"] and type(drop.rewards["Trait Shards"]) == "table" and drop.rewards["Trait Shards"].cap then
+				table.insert(traitMaps, {
+					world = drop.world,
+					mode = drop.mode,
+					act = drop.act,
+					cap = drop.rewards["Trait Shards"].cap,
+				})
 			end
 		end
 		table.sort(traitMaps, function(a, b)
@@ -324,51 +476,29 @@ if isLobby then
 			return a.mode < b.mode
 		end)
 
-		if isfile and writefile then
+		if writefile then
 			pcall(function()
-				writefile(basePath .. "/MapsCache.json", HttpService:JSONEncode(traitMaps))
+				local path = basePath .. "/MapsCache.json"
+				local encoded = HttpService:JSONEncode(traitMaps)
+				local old = nil
+				if isfile and readfile and isfile(path) then
+					old = readfile(path)
+				end
+				if old ~= encoded then
+					writefile(path, encoded)
+				end
 			end)
 		end
 		_G.MATERIAL_DROPS = {}
-		for worldId, world in pairs(Worlds) do
-			if type(worldId) == "number" and world.name and world.Rewards then
-				for mode, diffs in pairs(world.Rewards) do
-					for diff, acts in pairs(diffs) do
-						if type(acts) == "table" then
-							for act, items in pairs(acts) do
-								if type(items) == "table" then
-									for itemName, _ in pairs(items) do
-										local cleanName = string.lower(tostring(itemName))
-										if
-											cleanName ~= "gems"
-											and cleanName ~= "xp"
-											and cleanName ~= "gold"
-											and cleanName ~= "trait shards"
-											and cleanName ~= "senzu"
-											and cleanName ~= "energy"
-										then
-											if not _G.MATERIAL_DROPS[cleanName] then
-												_G.MATERIAL_DROPS[cleanName] =
-													{ world = world.name, mode = mode, acts = { act } }
-											else
-												local hasAct = false
-												for _, v in ipairs(_G.MATERIAL_DROPS[cleanName].acts) do
-													if v == act then
-														hasAct = true
-														break
-													end
-												end
-												if not hasAct then
-													table.insert(_G.MATERIAL_DROPS[cleanName].acts, act)
-												end
-											end
-										end
-									end
-								end
-							end
-						end
-					end
-				end
+		for _, drop in ipairs(collectWorldDrops()) do
+			for itemName, itemData in pairs(drop.rewards) do
+				registerMaterialDrop(itemName, {
+					world = drop.world,
+					mode = drop.mode,
+					difficulty = drop.difficulty,
+					acts = { drop.act },
+					chance = type(itemData) == "table" and itemData.chance or nil,
+				})
 			end
 		end
 		pcall(function()
@@ -376,29 +506,32 @@ if isLobby then
 			if type(Corr) == "table" and type(Corr.stages) == "table" then
 				for _, stage in pairs(Corr.stages) do
 					if type(stage.rewards) == "table" then
-						for itemName, _ in pairs(stage.rewards) do
-							local cleanName = string.lower(tostring(itemName))
-							if
-								cleanName ~= "gems"
-								and cleanName ~= "xp"
-								and cleanName ~= "gold"
-								and cleanName ~= "trait shards"
-								and cleanName ~= "senzu"
-								and cleanName ~= "energy"
-							then
-								if not _G.MATERIAL_DROPS[cleanName] then
-									_G.MATERIAL_DROPS[cleanName] =
-										{ world = stage.name, mode = "Corrupted", acts = { 1 } }
-								end
-							end
+						for itemName, itemData in pairs(stage.rewards) do
+							registerMaterialDrop(itemName, {
+								world = stage.name,
+								mode = "Corrupted",
+								difficulty = "Normal",
+								acts = { 1 },
+								boss = stage.boss,
+								isCorrupted = true,
+								chance = type(itemData) == "table" and itemData.chance or nil,
+							})
 						end
 					end
 				end
 			end
 		end)
-		if isfile and writefile then
+		if writefile then
 			pcall(function()
-				writefile(basePath .. "/MatCache.json", HttpService:JSONEncode(_G.MATERIAL_DROPS))
+				local path = basePath .. "/MatCache.json"
+				local encoded = HttpService:JSONEncode(_G.MATERIAL_DROPS)
+				local old = nil
+				if isfile and readfile and isfile(path) then
+					old = readfile(path)
+				end
+				if old ~= encoded then
+					writefile(path, encoded)
+				end
 			end)
 		end
 	else
@@ -407,6 +540,7 @@ if isLobby then
 				pcall(function()
 					_G.MATERIAL_DROPS = HttpService:JSONDecode(readfile(basePath .. "/MatCache.json"))
 				end)
+				pcall(normalizeMaterialCache)
 			end
 			if isfile and readfile and isfile(basePath .. "/MapsCache.json") then
 				local succ2, data2 = pcall(function()
@@ -425,6 +559,7 @@ else
 			pcall(function()
 				_G.MATERIAL_DROPS = HttpService:JSONDecode(readfile(basePath .. "/MatCache.json"))
 			end)
+			pcall(normalizeMaterialCache)
 		end
 		if isfile and readfile and isfile(basePath .. "/MapsCache.json") then
 			local succ, data = pcall(function()
@@ -637,6 +772,8 @@ local Locales = {
 		IgSpeedD = "Automatically clicks the 2x/3x speed button.",
 		IgUlt = "ENABLE Auto Ultimate",
 		IgUltD = "Only uses ultimate when enemies are present.",
+		IgFps = "ENABLE FPS Boost",
+		IgFpsD = "Disables particles and shadows to raise FPS on weak devices.",
 		IgSniper = "Challenge Sniper Sync",
 		IgSniperD = "Automatically return to lobby around XX:00 and XX:30 to check new challenges.",
 		IgSniperTog = "ENABLE Sniper Sync",
@@ -861,6 +998,8 @@ local Locales = {
 		IgSpeedD = "Tự động bấm nút tua nhanh 2x hoặc 3x.",
 		IgUlt = "BẬT Tự động dùng Chiêu cuối (Ultimate)",
 		IgUltD = "Chỉ sử dụng chiêu cuối khi có quái trên bản đồ.",
+		IgFps = "BẬT Tăng FPS (FPS Boost)",
+		IgFpsD = "Tắt hạt hiệu ứng và bóng đổ để tăng FPS cho máy yếu.",
 		IgSniper = "Đồng bộ Săn Challenge",
 		IgSniperD = "Tự động quay về sảnh lúc XX:00 và XX:30 để canh Challenge mới.",
 		IgSniperTog = "BẬT Đồng bộ Săn Challenge",
@@ -1034,7 +1173,7 @@ local Window = Fluent:CreateWindow({
 	SubTitle = L.WinSub,
 	TabWidth = 160,
 	Size = UDim2.fromOffset(580, 520),
-	Acrylic = true,
+	Acrylic = false,
 	Theme = "Dark",
 	MinimizeKey = Enum.KeyCode.LeftControl,
 })
@@ -1148,6 +1287,10 @@ else
 			capStr = capStr,
 			paragraph = paragraph,
 		}
+		-- OPT: yield periodically so creating many Fluent controls does not freeze a frame.
+		if i % 4 == 0 then
+			task.wait()
+		end
 	end
 end
 
@@ -1179,6 +1322,9 @@ else
 			capStr = capStr,
 			paragraph = paragraph,
 		}
+		if i % 4 == 0 then
+			task.wait()
+		end
 	end
 end
 
@@ -1205,6 +1351,109 @@ local ToggleSpeed =
 	Tabs.Ingame:AddToggle("AutoSpeedToggle", { Title = L.IgSpeed, Description = L.IgSpeedD, Default = false })
 local ToggleUltimate =
 	Tabs.Ingame:AddToggle("AutoUltimateToggle", { Title = L.IgUlt, Description = L.IgUltD, Default = false })
+local ToggleFpsBoost =
+	Tabs.Ingame:AddToggle("FpsBoostToggle", { Title = L.IgFps, Description = L.IgFpsD, Default = false })
+
+local _fpsBoostApplied = false
+
+local function isFpsVisualEffect(v)
+	return v:IsA("ParticleEmitter")
+		or v:IsA("Trail")
+		or v:IsA("Beam")
+		or v:IsA("Fire")
+		or v:IsA("Smoke")
+		or v:IsA("Sparkles")
+end
+
+local function disableFpsVisualEffect(v)
+	if isFpsVisualEffect(v) then
+		pcall(function()
+			v.Enabled = false
+		end)
+	end
+end
+
+local function disconnectFpsWatcher()
+	local conn = _G.AnimeSquadronFpsDescendantConnection
+	if conn then
+		pcall(function()
+			conn:Disconnect()
+		end)
+		_G.AnimeSquadronFpsDescendantConnection = nil
+	end
+end
+
+local function applyFpsBoost()
+	if _fpsBoostApplied then
+		return
+	end
+	_fpsBoostApplied = true
+	_G.AnimeSquadronFpsBoostEnabled = true
+
+	task.spawn(function()
+		pcall(function()
+			local Lighting = game:GetService("Lighting")
+			Lighting.GlobalShadows = false
+			for _, v in ipairs(Lighting:GetChildren()) do
+				if v:IsA("PostEffect") or v:IsA("Atmosphere") or v:IsA("Sky") then
+					pcall(function()
+						v.Enabled = false
+					end)
+				end
+			end
+		end)
+
+		-- OPT: walk the instance tree incrementally. Calling workspace:GetDescendants()
+		-- itself allocates one huge array and can hitch before batching even starts.
+		pcall(function()
+			local queue = { workspace }
+			local head, tail = 1, 1
+			local processed = 0
+			while head <= tail do
+				local node = queue[head]
+				queue[head] = nil
+				head = head + 1
+				local children = node:GetChildren()
+				for _, child in ipairs(children) do
+					disableFpsVisualEffect(child)
+					tail = tail + 1
+					queue[tail] = child
+				end
+				processed = processed + 1
+				if processed % 150 == 0 then
+					task.wait()
+				end
+			end
+		end)
+
+		pcall(function()
+			local Terrain = workspace:FindFirstChildOfClass("Terrain")
+			if Terrain then
+				Terrain.WaterWaveSize = 0
+				Terrain.WaterWaveSpeed = 0
+				Terrain.WaterReflectance = 0
+				Terrain.WaterTransparency = 1
+			end
+		end)
+
+		disconnectFpsWatcher()
+		_G.AnimeSquadronFpsDescendantConnection = workspace.DescendantAdded:Connect(function(v)
+			if _G.AnimeSquadronFpsBoostEnabled then
+				disableFpsVisualEffect(v)
+			end
+		end)
+	end)
+end
+
+ToggleFpsBoost:OnChanged(function()
+	if Options.FpsBoostToggle and Options.FpsBoostToggle.Value then
+		applyFpsBoost()
+	else
+		_G.AnimeSquadronFpsBoostEnabled = false
+		_fpsBoostApplied = false
+		disconnectFpsWatcher()
+	end
+end)
 
 Tabs.Ingame:AddParagraph({ Title = L.IgSniper, Content = L.IgSniperD })
 local ToggleSniperSync =
@@ -1218,17 +1467,28 @@ local DropdownSniperSyncMode = Tabs.Ingame:AddDropdown("SniperSyncMode", {
 })
 Tabs.EvoCraft:AddParagraph({ Title = L.EvoPri, Content = L.EvoPriD })
 
+local _autoSaveRaw = nil
+local _autoSaveRawLoaded = false
+local function getAutoSaveRaw()
+	if _autoSaveRawLoaded then
+		return _autoSaveRaw
+	end
+	_autoSaveRawLoaded = true
+	if isfile and readfile and isfile(basePath .. "/AutoFarm/settings/AutoSave.json") then
+		pcall(function()
+			_autoSaveRaw = readfile(basePath .. "/AutoFarm/settings/AutoSave.json")
+		end)
+	end
+	return _autoSaveRaw
+end
+
 local function getSavedTarget(key, defaultVal)
 	local saved = defaultVal
-	if isfile and readfile and isfile(basePath .. "/AutoFarm/settings/AutoSave.json") then
-		local succ, content = pcall(function()
-			return readfile(basePath .. "/AutoFarm/settings/AutoSave.json")
-		end)
-		if succ and type(content) == "string" then
-			local match = string.match(content, '"idx"%s*:%s*"' .. key .. '".-"value"%s*:%s*"([^"]+)"')
-			if match then
-				saved = match
-			end
+	local content = getAutoSaveRaw()
+	if type(content) == "string" then
+		local match = string.match(content, '"idx"%s*:%s*"' .. key .. '".-"value"%s*:%s*"([^"]+)"')
+		if match then
+			saved = match
 		end
 	end
 	return saved
@@ -1243,13 +1503,20 @@ local DropdownEvoTarget = Tabs.EvoCraft:AddDropdown(
 if isLobby then
 	task.spawn(function()
 		local util
-		while task.wait(5) do
+		local lastCharCount = -1
+		while task.wait(10) do
 			if not util then
 				pcall(function()
 					util = require(game:GetService("Players").LocalPlayer.PlayerScripts.Client.Utility)
 				end)
 			end
 			if util and util.data and util.data.characters then
+				local charCount = 0
+				for _ in pairs(util.data.characters) do
+					charCount = charCount + 1
+				end
+				if charCount ~= lastCharCount then
+					lastCharCount = charCount
 				local ownedEvos = {}
 				local added = {}
 				for id, char in pairs(util.data.characters) do
@@ -1267,7 +1534,22 @@ if isLobby then
 				if #ownedEvos == 0 then
 					table.insert(ownedEvos, "(No Evo Units Owned)")
 				end
-				DropdownEvoTarget:SetValues(ownedEvos)
+				table.sort(ownedEvos)
+
+				local prevVals = DropdownEvoTarget.Values or {}
+				local isDiff = #ownedEvos ~= #prevVals
+				if not isDiff then
+					for i = 1, #ownedEvos do
+						if ownedEvos[i] ~= prevVals[i] then
+							isDiff = true
+							break
+						end
+					end
+				end
+					if isDiff then
+						DropdownEvoTarget:SetValues(ownedEvos)
+					end
+				end
 			end
 		end
 	end)
@@ -1283,24 +1565,37 @@ local DropdownCraftTarget = Tabs.EvoCraft:AddDropdown(
 	{ Title = L.CraftTarget, Description = L.CraftTargetD, Values = { initCraft }, Multi = false, Default = 1 }
 )
 
+
+_G.AnimeSquadron_Recipes = _G.AnimeSquadron_Recipes or nil
+local _recipesCacheTime = 0
+local function getCachedRecipes()
+	if _G.AnimeSquadron_Recipes and os.time() - _recipesCacheTime < 60 then
+		return _G.AnimeSquadron_Recipes
+	end
+	local craftingFolder = game:GetService("ReplicatedStorage").Remotes:FindFirstChild("Crafting")
+	local get = craftingFolder and craftingFolder:FindFirstChild("get")
+	if not get then
+		return _G.AnimeSquadron_Recipes
+	end
+	local succ, recipes = pcall(function()
+		return get:InvokeServer()
+	end)
+	if succ and type(recipes) == "table" then
+		_G.AnimeSquadron_Recipes = recipes
+		_recipesCacheTime = os.time()
+	end
+	return _G.AnimeSquadron_Recipes
+end
+
 task.spawn(function()
 	local craftTargets = {}
-	local craftingFolder = game:GetService("ReplicatedStorage").Remotes:FindFirstChild("Crafting")
-	if craftingFolder then
-		local get = craftingFolder:WaitForChild("get", 5)
-		if get then
-			local succ, recipes = pcall(function()
-				return get:InvokeServer()
-			end)
-			if succ and type(recipes) == "table" then
-				_G.AnimeSquadron_Recipes = recipes
-				for name, _ in pairs(recipes) do
-					table.insert(craftTargets, name)
-				end
-				if _G.AnimeSquadron_UpdateCraftQueueUI then
-					_G.AnimeSquadron_UpdateCraftQueueUI()
-				end
-			end
+	local recipes = getCachedRecipes()
+	if type(recipes) == "table" then
+		for name, _ in pairs(recipes) do
+			table.insert(craftTargets, name)
+		end
+		if _G.AnimeSquadron_UpdateCraftQueueUI then
+			_G.AnimeSquadron_UpdateCraftQueueUI()
 		end
 	end
 	table.sort(craftTargets)
@@ -1418,95 +1713,63 @@ local DropdownRerollUnit = Tabs.AutoReroll:AddDropdown(
 	{ Title = L.RerollUnit, Description = L.RerollUnitD, Values = { "(Loading...)" }, Multi = false, Default = 1 }
 )
 
+local function refreshRerollUnitList()
+	local util
+	pcall(function()
+		util = require(game:GetService("Players").LocalPlayer.PlayerScripts.Client.Utility)
+	end)
+	if not (util and util.data and util.data.characters) then
+		return
+	end
+
+	local unitList = {}
+	for k, v in pairs(util.data.characters) do
+		if v.equipped == true then
+			table.insert(unitList, v.name .. " [" .. tostring(k) .. "]")
+		end
+	end
+	table.sort(unitList)
+	if #unitList == 0 then
+		table.insert(unitList, "(No Equipped Units)")
+	end
+
+	local currentVals = DropdownRerollUnit.Values or {}
+	local isDiff = #unitList ~= #currentVals
+	if not isDiff then
+		for i = 1, #unitList do
+			if unitList[i] ~= currentVals[i] then
+				isDiff = true
+				break
+			end
+		end
+	end
+	if not isDiff then
+		return
+	end
+
+	local currentVal = Options.RerollUnit and Options.RerollUnit.Value
+	local found = currentVal and table.find(unitList, currentVal) ~= nil
+	DropdownRerollUnit:SetValues(unitList)
+	-- Preserve the value without re-firing OnChanged when it is still valid.
+	if currentVal and not found then
+		DropdownRerollUnit:SetValue(unitList[1])
+	end
+end
+
 Tabs.AutoReroll:AddButton({
 	Title = "Refresh Unit List",
 	Description = "Manually refresh the list of equipped units.",
-	Callback = function()
-		local util
-		pcall(function()
-			util = require(game:GetService("Players").LocalPlayer.PlayerScripts.Client.Utility)
-		end)
-		if util and util.data and util.data.characters then
-			local unitList = {}
-			for k, v in pairs(util.data.characters) do
-				if v.equipped == true then
-					table.insert(unitList, v.name .. " [" .. tostring(k) .. "]")
-				end
-			end
-			if #unitList == 0 then
-				table.insert(unitList, "(No Equipped Units)")
-			end
-
-			local currentVal = Options.RerollUnit and Options.RerollUnit.Value
-			local found = false
-			if currentVal then
-				for _, u in ipairs(unitList) do
-					if u == currentVal then
-						found = true
-						break
-					end
-				end
-			end
-
-			DropdownRerollUnit:SetValues(unitList)
-			if currentVal and not found then
-				DropdownRerollUnit:SetValue(unitList[1])
-			elseif currentVal and found then
-				DropdownRerollUnit:SetValue(currentVal)
-			end
-		end
-	end,
+	Callback = refreshRerollUnitList,
 })
 
+-- Populate once, then only poll while Auto Reroll is actually enabled.
 task.spawn(function()
-	local util
-	while task.wait(3) do
-		pcall(function()
-			util = require(game:GetService("Players").LocalPlayer.PlayerScripts.Client.Utility)
-		end)
-		if util and util.data and util.data.characters then
-			local unitList = {}
-			for k, v in pairs(util.data.characters) do
-				if v.equipped == true then
-					table.insert(unitList, v.name .. " [" .. tostring(k) .. "]")
-				end
-			end
-			if #unitList == 0 then
-				table.insert(unitList, "(No Equipped Units)")
-			end
-
-			local currentVals = DropdownRerollUnit.Values or {}
-			local isDiff = false
-			if #unitList ~= #currentVals then
-				isDiff = true
-			else
-				for i = 1, #unitList do
-					if unitList[i] ~= currentVals[i] then
-						isDiff = true
-						break
-					end
-				end
-			end
-
-			if isDiff then
-				local currentVal = Options.RerollUnit and Options.RerollUnit.Value
-				local found = false
-				if currentVal then
-					for _, u in ipairs(unitList) do
-						if u == currentVal then
-							found = true
-							break
-						end
-					end
-				end
-
-				DropdownRerollUnit:SetValues(unitList)
-				if currentVal and not found then
-					DropdownRerollUnit:SetValue(unitList[1])
-				elseif currentVal and found then
-					DropdownRerollUnit:SetValue(currentVal)
-				end
-			end
+	task.wait(1)
+	refreshRerollUnitList()
+	while true do
+		task.wait(10)
+		if Options.AutoReroll and Options.AutoReroll.Value then
+			refreshRerollUnitList()
 		end
 	end
 end)
@@ -1523,30 +1786,66 @@ local ToggleAutoReroll =
 	Tabs.AutoReroll:AddToggle("AutoReroll", { Title = L.RerollTog, Description = L.RerollTogD, Default = false })
 Tabs.ShopUpgrade:AddParagraph({ Title = L.ShopDyn, Content = L.ShopDynD })
 
-local function loadShopItems(shopName)
-	local items = {}
+local SHOP_ITEMS_FILE = "as_free/ShopItems.json"
+local _shopItemsCache = nil
+
+local function cloneArray(list)
+	local out = {}
+	if type(list) == "table" then
+		for i, v in ipairs(list) do
+			out[i] = v
+		end
+	end
+	return out
+end
+
+local function arraysEqual(a, b)
+	if type(a) ~= "table" or type(b) ~= "table" or #a ~= #b then
+		return false
+	end
+	for i = 1, #a do
+		if a[i] ~= b[i] then
+			return false
+		end
+	end
+	return true
+end
+
+local function ensureShopItemsCache()
+	if _shopItemsCache then
+		return _shopItemsCache
+	end
+	_shopItemsCache = {}
 	pcall(function()
-		if isfile and readfile and isfile("as_free/ShopItems.json") then
-			local data = game:GetService("HttpService"):JSONDecode(readfile("as_free/ShopItems.json"))
-			if data and type(data) == "table" and data[shopName] then
-				items = data[shopName]
+		if isfile and readfile and isfile(SHOP_ITEMS_FILE) then
+			local data = game:GetService("HttpService"):JSONDecode(readfile(SHOP_ITEMS_FILE))
+			if type(data) == "table" then
+				_shopItemsCache = data
 			end
 		end
 	end)
-	return items
+	return _shopItemsCache
+end
+
+local function loadShopItems(shopName)
+	local cache = ensureShopItemsCache()
+	return cloneArray(cache[shopName])
 end
 
 local function saveShopItems(shopName, itemsList)
-	pcall(function()
-		local data = {}
-		if isfile and readfile and isfile("as_free/ShopItems.json") then
-			data = game:GetService("HttpService"):JSONDecode(readfile("as_free/ShopItems.json")) or {}
-		end
-		data[shopName] = itemsList
-		if writefile then
-			writefile("as_free/ShopItems.json", game:GetService("HttpService"):JSONEncode(data))
-		end
-	end)
+	local cache = ensureShopItemsCache()
+	local normalized = cloneArray(itemsList)
+	table.sort(normalized)
+	if arraysEqual(cache[shopName] or {}, normalized) then
+		return false
+	end
+	cache[shopName] = normalized
+	if writefile then
+		pcall(function()
+			writefile(SHOP_ITEMS_FILE, game:GetService("HttpService"):JSONEncode(cache))
+		end)
+	end
+	return true
 end
 
 local DropdownMerchantItem = Tabs.ShopUpgrade:AddDropdown(
@@ -1680,34 +1979,42 @@ if isLobby then
 		if not get then
 			return
 		end
-		local HttpService = game:GetService("HttpService")
 
-		while task.wait(10) do
+		local function updateShop(shopId, dropdown, saveKey)
+			local succ, data = pcall(function()
+				return get:InvokeServer(shopId)
+			end)
+			if not (succ and type(data) == "table") then
+				return
+			end
+
+			local items = {}
+			for k in pairs(data) do
+				table.insert(items, tostring(k))
+			end
+			table.sort(items)
+			if #items == 0 then
+				table.insert(items, "(Empty)")
+			else
+				saveShopItems(saveKey, items)
+			end
+
+			local currentVals = dropdown.Values or {}
+			if arraysEqual(currentVals, items) then
+				return
+			end
+			local currentShopItem = dropdown.Value
+			dropdown:SetValues(items)
+			if currentShopItem then
+				dropdown:SetValue(currentShopItem)
+			end
+		end
+
+		-- OPT: shop inventories do not need a 10s full remote/UI/disk refresh.
+		while task.wait(30) do
 			if _G.AnimeSquadronShopLoop ~= currentLoopId then
 				return
 			end
-			local function updateShop(shopId, dropdown, saveKey)
-				local succ, data = pcall(function()
-					return get:InvokeServer(shopId)
-				end)
-				if succ and type(data) == "table" then
-					local items = {}
-					for k, v in pairs(data) do
-						table.insert(items, tostring(k))
-					end
-					local currentShopItem = dropdown.Value
-					if #items == 0 then
-						table.insert(items, "(Empty)")
-					else
-						saveShopItems(saveKey, items)
-					end
-					dropdown:SetValues(items)
-					if currentShopItem then
-						dropdown:SetValue(currentShopItem)
-					end
-				end
-			end
-
 			updateShop("gt_city_raid", DropdownRaidShopItem, "Raid")
 			updateShop("baras_event", DropdownEventShopItem, "Event")
 		end
@@ -1811,6 +2118,7 @@ local StatsParagraph = Tabs.AutoFarm:AddParagraph({
 	Content = L.AF_SessD,
 })
 
+local _lastStatsText = nil
 local function saveSessionStats()
 	if writefile then
 		pcall(function()
@@ -1821,7 +2129,6 @@ end
 
 local function updateStatsUI()
 	if StatsParagraph then
-		print("[AnimeSquadron] Running NEW updateStatsUI version!")
 		local matchesStr = currentLang == "VN" and "Số trận đã chơi: " or "Matches Played: "
 		local lines = { matchesStr .. tostring(SessionStats.Matches) }
 
@@ -1860,7 +2167,11 @@ local function updateStatsUI()
 			table.insert(lines, string.format("%s: +%d (Current: %d)", name, gained, current))
 		end
 
-		StatsParagraph:SetDesc(table.concat(lines, "\n"))
+		local text = table.concat(lines, "\n")
+		if text ~= _lastStatsText then
+			_lastStatsText = text
+			StatsParagraph:SetDesc(text)
+		end
 	end
 end
 
@@ -1965,6 +2276,24 @@ local function moveValueFirst(values, target)
 	end
 end
 
+local function dropdownArrayEqual(current, wanted)
+	if type(current) ~= "table" or #current ~= #wanted then
+		return false
+	end
+	for i = 1, #wanted do
+		if current[i] ~= wanted[i] then
+			return false
+		end
+	end
+	return true
+end
+
+local function setDropdownValuesIfChanged(dropdown, values)
+	if not dropdownArrayEqual(dropdown.Values or {}, values) then
+		dropdown:SetValues(values)
+	end
+end
+
 local refreshingAutoJoinMap = false
 local function refreshAutoJoinMapControls()
 	if refreshingAutoJoinMap then
@@ -1976,7 +2305,8 @@ local function refreshAutoJoinMapControls()
 	local worldData = joinableMapTree[world] or {}
 	local modes = sortedKeys(worldData)
 	moveValueFirst(modes, "Story")
-	AutoJoinMode:SetValues(#modes > 0 and modes or { "(None)" })
+	local modeValues = #modes > 0 and modes or { "(None)" }
+	setDropdownValuesIfChanged(AutoJoinMode, modeValues)
 	if not worldData[Options.AutoJoinMode.Value] then
 		AutoJoinMode:SetValue(modes[1] or "(None)")
 	end
@@ -1984,7 +2314,8 @@ local function refreshAutoJoinMapControls()
 	local modeData = worldData[Options.AutoJoinMode.Value] or {}
 	local difficulties = sortedKeys(modeData)
 	moveValueFirst(difficulties, "Normal")
-	AutoJoinDifficulty:SetValues(#difficulties > 0 and difficulties or { "(None)" })
+	local difficultyValues = #difficulties > 0 and difficulties or { "(None)" }
+	setDropdownValuesIfChanged(AutoJoinDifficulty, difficultyValues)
 	if not modeData[Options.AutoJoinDifficulty.Value] then
 		AutoJoinDifficulty:SetValue(difficulties[1] or "(None)")
 	end
@@ -1993,7 +2324,8 @@ local function refreshAutoJoinMapControls()
 	local acts = sortedKeys(difficultyData, function(act)
 		return "Act " .. tostring(act)
 	end)
-	AutoJoinAct:SetValues(#acts > 0 and acts or { "(None)" })
+	local actValues = #acts > 0 and acts or { "(None)" }
+	setDropdownValuesIfChanged(AutoJoinAct, actValues)
 	local currentAct = tonumber(string.match(tostring(Options.AutoJoinAct.Value), "%d+"))
 	if not currentAct or not difficultyData[currentAct] then
 		AutoJoinAct:SetValue(acts[1] or "(None)")
@@ -2178,7 +2510,21 @@ local function resolveFarmMap(targetMaps, target, difficulty)
 	if not maps then
 		return nil
 	end
-	return maps[difficulty] or maps.Hard or maps.Normal or select(2, next(maps))
+
+
+	if difficulty and maps[difficulty] then
+		return maps[difficulty]
+	end
+	local fallback
+	for key, map in pairs(maps) do
+		if type(map) == "table" then
+			if difficulty and map.difficulty == difficulty then
+				return map
+			end
+			fallback = fallback or map
+		end
+	end
+	return fallback
 end
 
 local function formatFarmMap(map)
@@ -2189,13 +2535,23 @@ local function formatFarmMap(map)
 	return string.format("[%s] %s - Act %d (%s)%s", map.mode, map.world, map.act, map.difficulty, chance)
 end
 
+local _lastFarmGearInfo = nil
+local _lastFarmUnitInfo = nil
 local function refreshFarmTargetInfo()
-	FarmGearInfo:SetDesc(
-		formatFarmMap(resolveFarmMap(gearFarmMaps, Options.FarmGearTarget.Value, Options.FarmGearDifficulty.Value))
+	local gearText = formatFarmMap(
+		resolveFarmMap(gearFarmMaps, Options.FarmGearTarget.Value, Options.FarmGearDifficulty.Value)
 	)
-	FarmUnitInfo:SetDesc(
-		formatFarmMap(resolveFarmMap(unitFarmMaps, Options.FarmUnitTarget.Value, Options.FarmUnitDifficulty.Value))
+	local unitText = formatFarmMap(
+		resolveFarmMap(unitFarmMaps, Options.FarmUnitTarget.Value, Options.FarmUnitDifficulty.Value)
 	)
+	if gearText ~= _lastFarmGearInfo then
+		_lastFarmGearInfo = gearText
+		FarmGearInfo:SetDesc(gearText)
+	end
+	if unitText ~= _lastFarmUnitInfo then
+		_lastFarmUnitInfo = unitText
+		FarmUnitInfo:SetDesc(unitText)
+	end
 end
 refreshFarmTargetInfo()
 
@@ -2225,6 +2581,24 @@ task.spawn(function()
 end)
 local AutoToggle =
 	Tabs.AutoFarm:AddToggle("MasterAutoRun", { Title = L.AF_Master, Description = L.AF_MasterD, Default = false })
+
+local reconnectLoopStarted = false
+local function startReconnectLoop()
+	if reconnectLoopStarted then
+		return
+	end
+	reconnectLoopStarted = true
+	print("[Auto-Reconnect] Bị văng do lỗi khác. Đang thử vào lại...")
+	task.spawn(function()
+		while reconnectLoopStarted do
+			pcall(function()
+				game:GetService("TeleportService"):Teleport(71132543521245, game:GetService("Players").LocalPlayer)
+			end)
+			task.wait(10)
+		end
+	end)
+end
+
 local function handleDisconnectPrompt(child)
 	if child.Name ~= "ErrorPrompt" then
 		return
@@ -2240,15 +2614,7 @@ local function handleDisconnectPrompt(child)
 		warn("[Auto-Reconnect] Bị đá do log acc ở máy khác (Lỗi 264/273). HỦY RECONNECT!")
 		return
 	end
-	print("[Auto-Reconnect] Bị văng do lỗi khác. Đang thử vào lại liên tục...")
-	task.spawn(function()
-		while true do
-			task.wait(5)
-			pcall(function()
-				game:GetService("TeleportService"):Teleport(71132543521245, game:GetService("Players").LocalPlayer)
-			end)
-		end
-	end)
+	startReconnectLoop()
 end
 
 pcall(function()
@@ -2268,14 +2634,7 @@ game:GetService("GuiService").ErrorMessageChanged:Connect(function(errMessage)
 		if string.find(lowerErr, "264") or string.find(lowerErr, "273") or string.find(lowerErr, "same account") then
 			return
 		end
-		task.spawn(function()
-			while true do
-				task.wait(5)
-				pcall(function()
-					game:GetService("TeleportService"):Teleport(71132543521245, game:GetService("Players").LocalPlayer)
-				end)
-			end
-		end)
+		startReconnectLoop()
 	end
 end)
 
@@ -2594,7 +2953,7 @@ if isLobby then
 						task.wait(1)
 					end
 
-					-- Check who failed to join
+
 					local currentRoom = activeRooms[hostIdStr] or activeRooms[tonumber(hostIdStr)]
 					local joinedIds = {}
 					if currentRoom and currentRoom.players then
@@ -2671,21 +3030,76 @@ if isLobby then
 	_G.AnimeSquadronMainLoop = (_G.AnimeSquadronMainLoop or 0) + 1
 	local currentLoopId = _G.AnimeSquadronMainLoop
 	task.spawn(function()
-		task.wait(10) -- Initial delay to allow Evo/Craft to load their data fully before skipping to Trait Maps
+		task.wait(10)
 		local lastClaimTime = 0
+		local lastPassiveClaimTime = 0
+		local lastPerkTime = 0
+		local lastQuestClaimTime = 0
+		local lastSummonTime = 0
 		local lobbyEnterTime = os.time()
 		local buyingDebounce = {}
+		local _lastSnipeBoundary = nil
+		local _mainTick = 0
+
+		-- OPT: these used to be declared inside the 3-second loop, which destroyed the cache
+		-- every iteration and caused Shops.get:InvokeServer() to run repeatedly.
+		local _shopDefs, _shopCurrencies, _shopDefsTime = nil, nil, 0
+		local function getCachedShopDefs()
+			if _shopDefs and os.time() - _shopDefsTime < 60 then
+				return _shopDefs, _shopCurrencies
+			end
+			local folder = game:GetService("ReplicatedStorage").Remotes:FindFirstChild("Shops")
+			local get = folder and folder:FindFirstChild("get")
+			if not get then
+				return _shopDefs, _shopCurrencies
+			end
+			local a, b
+			pcall(function()
+				a, b = get:InvokeServer()
+			end)
+			if type(a) == "table" then
+				_shopDefs = a
+				_shopDefsTime = os.time()
+			end
+			if type(b) == "table" then
+				_shopCurrencies = b
+			end
+			return _shopDefs, _shopCurrencies
+		end
+
+		local _challengesCache, _challengesCacheTime = nil, 0
+		local function getCachedChallenges()
+			if _challengesCache and os.time() - _challengesCacheTime < 15 then
+				return true, _challengesCache
+			end
+			local succ, data = pcall(function()
+				return get_challenges:InvokeServer()
+			end)
+			if succ and type(data) == "table" then
+				_challengesCache, _challengesCacheTime = data, os.time()
+			end
+			return succ, data
+		end
+		local _lastParagraphText = {}
+		local function setParagraphDesc(paragraph, key, text)
+			if _lastParagraphText[key] ~= text then
+				_lastParagraphText[key] = text
+				paragraph:SetDesc(text)
+			end
+		end
 		while true do
 			task.wait(3)
 			if _G.AnimeSquadronMainLoop ~= currentLoopId then
 				return
 			end
+			local loopNow = os.time()
+			_mainTick = _mainTick + 1
 
 			if Options.MasterAutoRun.Value then
 				if Options.StuckAutoHop and Options.StuckAutoHop.Value then
 					local timeout = Options.StuckTimeout and Options.StuckTimeout.Value or 60
 					if os.time() - lobbyEnterTime > timeout then
-						-- Handle Hopping
+
 						local HttpService = game:GetService("HttpService")
 						local TeleportService = game:GetService("TeleportService")
 						pcall(function()
@@ -2797,12 +3211,14 @@ if isLobby then
 									requiredGems = 500
 								end
 
-								if currentGems >= requiredGems then
-									pcall(function()
-										game:GetService("ReplicatedStorage").Remotes.Summon.start
-											:InvokeServer("Basic Banner", 10)
+								if currentGems >= requiredGems and loopNow - lastSummonTime >= 5 then
+									lastSummonTime = loopNow
+									task.spawn(function()
+										pcall(function()
+											game:GetService("ReplicatedStorage").Remotes.Summon.start
+												:InvokeServer("Basic Banner", 10)
+										end)
 									end)
-									task.wait(1)
 								end
 							end
 						elseif
@@ -2830,36 +3246,116 @@ if isLobby then
 						end
 					end
 				end
-				if anyToClaim then
-					pcall(function()
-						game:GetService("ReplicatedStorage").Remotes.Quests.claim_all:InvokeServer()
+				if anyToClaim and loopNow - lastQuestClaimTime >= 10 then
+					lastQuestClaimTime = loopNow
+					task.spawn(function()
+						pcall(function()
+							game:GetService("ReplicatedStorage").Remotes.Quests.claim_all:InvokeServer()
+						end)
 					end)
 				end
 				return needToMap
 			end
-			if Options.AutoPass and Options.AutoPass.Value then
-				pcall(function()
-					game:GetService("ReplicatedStorage").Remotes.Battlepass.claim_all:InvokeServer()
-				end)
+			if loopNow - lastPassiveClaimTime >= 30 then
+				lastPassiveClaimTime = loopNow
+				if Options.AutoPass and Options.AutoPass.Value then
+					task.spawn(function()
+						pcall(function()
+							game:GetService("ReplicatedStorage").Remotes.Battlepass.claim_all:InvokeServer()
+						end)
+					end)
+				end
+				if Options.AutoMilestones and Options.AutoMilestones.Value then
+					task.spawn(function()
+						pcall(function()
+							game:GetService("ReplicatedStorage").Remotes.Level_Milestones.claim:InvokeServer()
+						end)
+					end)
+				end
+				if Options.AutoDiscovery and Options.AutoDiscovery.Value then
+					task.spawn(function()
+						pcall(function()
+							game:GetService("ReplicatedStorage").Remotes.Characters.claim_all_index:InvokeServer()
+						end)
+					end)
+				end
 			end
-			if Options.AutoMilestones and Options.AutoMilestones.Value then
-				pcall(function()
-					game:GetService("ReplicatedStorage").Remotes.Level_Milestones.claim:InvokeServer()
-				end)
-			end
-			if Options.AutoDiscovery and Options.AutoDiscovery.Value then
-				pcall(function()
-					game:GetService("ReplicatedStorage").Remotes.Characters.claim_all_index:InvokeServer()
-				end)
-			end
-			if Options.AutoPerk and Options.AutoPerk.Value then
-				pcall(function()
-					game:GetService("ReplicatedStorage").Remotes.Perks.upgrade:InvokeServer(Options.PerkTarget.Value)
+			if Options.AutoPerk and Options.AutoPerk.Value and loopNow - lastPerkTime >= 5 then
+				lastPerkTime = loopNow
+				task.spawn(function()
+					pcall(function()
+						game:GetService("ReplicatedStorage").Remotes.Perks.upgrade:InvokeServer(Options.PerkTarget.Value)
+					end)
 				end)
 			end
 			local function tryBuyShop(toggleOpt, itemOpt, shopId)
 				if toggleOpt and toggleOpt.Value then
 					local items = itemOpt and itemOpt.Value
+					local defs, currencies = getCachedShopDefs()
+					local shopDefs = defs and defs[shopId]
+					if type(shopDefs) ~= "table" then
+						return
+					end
+					local currencyName
+					if type(currencies) == "table" and type(currencies[shopId]) == "table" then
+						currencyName = currencies[shopId].name
+					end
+					local function balanceOf(name)
+						if not name or not (util and util.data) then
+							return 0
+						end
+						local total = 0
+						if util.data.items and util.data.items[name] then
+							total = total + util.data.items[name]
+						end
+						if util.data.stats and util.data.stats[name] then
+							total = total + util.data.stats[name]
+						end
+						return total
+					end
+					local function buyItem(itemName)
+						local id = shopId .. "_" .. itemName
+						if buyingDebounce[id] then
+							return
+						end
+						local def = shopDefs[itemName]
+						if type(def) ~= "table" then
+							return
+						end
+						local maxStock = tonumber(def.max) or 0
+						local cost = tonumber(def.cost) or 0
+						if maxStock <= 0 or cost <= 0 then
+							return
+						end
+						local bought = 0
+						if util and util.data and util.data.shop_stocks and util.data.shop_stocks[shopId] then
+							bought = tonumber(util.data.shop_stocks[shopId][itemName]) or 0
+						end
+						local remaining = maxStock - bought
+						if remaining <= 0 then
+							return
+						end
+						local affordable = math.floor(balanceOf(currencyName) / cost)
+						if affordable <= 0 then
+							return
+						end
+						local qty = math.min(remaining, affordable)
+						buyingDebounce[id] = true
+						task.spawn(function()
+							local ok, newData = pcall(function()
+								return game:GetService("ReplicatedStorage").Remotes.Shops.buy:InvokeServer(
+									itemName,
+									shopId,
+									qty
+								)
+							end)
+							if ok and type(newData) == "table" then
+								util.data = newData
+							end
+							task.wait(1)
+							buyingDebounce[id] = nil
+						end)
+					end
 					if type(items) == "table" then
 						for itemName, isSelected in pairs(items) do
 							if
@@ -2867,46 +3363,12 @@ if isLobby then
 								and not string.find(itemName, "Waiting")
 								and not string.find(itemName, "Empty")
 							then
-								local id = shopId .. "_" .. itemName
-								if not buyingDebounce[id] then
-									buyingDebounce[id] = true
-									task.spawn(function()
-										for i = 1, 100 do
-											local s, r = pcall(function()
-												return game:GetService("ReplicatedStorage").Remotes.Shops.buy
-													:InvokeServer(itemName, shopId, 1)
-											end)
-											if not s or not r then
-												break
-											end
-											task.wait(0.2)
-										end
-										task.wait(5)
-										buyingDebounce[id] = nil
-									end)
-								end
+								buyItem(itemName)
 							end
 						end
 					elseif type(items) == "string" then
 						if not string.find(items, "Waiting") and not string.find(items, "Empty") then
-							local id = shopId .. "_" .. items
-							if not buyingDebounce[id] then
-								buyingDebounce[id] = true
-								task.spawn(function()
-									for i = 1, 100 do
-										local s, r = pcall(function()
-											return game:GetService("ReplicatedStorage").Remotes.Shops.buy
-												:InvokeServer(items, shopId, 1)
-										end)
-										if not s or not r then
-											break
-										end
-										task.wait(0.2)
-									end
-									task.wait(5)
-									buyingDebounce[id] = nil
-								end)
-							end
+							buyItem(items)
 						end
 					end
 				end
@@ -2932,15 +3394,8 @@ if isLobby then
 
 				local targetName = currentTask.name
 				local targetQty = currentTask.qty
-				local get = game:GetService("ReplicatedStorage").Remotes.Crafting:WaitForChild("get", 5)
-				if not get then
-					return true
-				end
-
-				local succ, recipes = pcall(function()
-					return get:InvokeServer()
-				end)
-				if not succ or type(recipes) ~= "table" or not recipes[targetName] then
+				local recipes = getCachedRecipes()
+				if type(recipes) ~= "table" or not recipes[targetName] then
 					table.insert(activeQuestTexts, "Waiting for Recipe Data...")
 					return true
 				end
@@ -2980,20 +3435,27 @@ if isLobby then
 						activeQuestTexts,
 						string.format("Craft Farming: %s (Need %d %s)", targetName, mat.short, mat.name)
 					)
-					local cleanMatName = string.lower(tostring(mat.name))
-					if _G.MATERIAL_DROPS and _G.MATERIAL_DROPS[cleanMatName] then
-						local dropInfo = _G.MATERIAL_DROPS[cleanMatName]
+					local dropInfo = pickMaterialDrop(mat.name)
+					if dropInfo then
 						activeQuestMap = {
 							mode = dropInfo.mode,
 							world = dropInfo.world,
 							act = dropInfo.acts[#dropInfo.acts],
-							diff = "Hard",
+							diff = dropInfo.omitDifficulty and nil or dropInfo.difficulty,
 							isMat = true,
 							matName = mat.name,
 							maxCap = mat.total,
+							boss = dropInfo.boss,
+							isCorrupted = dropInfo.isCorrupted,
 						}
+						return true
 					end
-					return true
+
+					table.insert(
+						activeQuestTexts,
+						string.format("Craft: no known map drops %s, skipping...", mat.name)
+					)
+					return false
 				else
 					table.insert(activeQuestTexts, string.format("Craft Ready: %s x%d", targetName, targetQty))
 					local craftedCount = 0
@@ -3085,20 +3547,27 @@ if isLobby then
 						activeQuestTexts,
 						string.format("Evo Farming: %s (Need %d %s)", targetName, mat.short, mat.name)
 					)
-					local cleanMatName = string.lower(tostring(mat.name))
-					if _G.MATERIAL_DROPS and _G.MATERIAL_DROPS[cleanMatName] then
-						local dropInfo = _G.MATERIAL_DROPS[cleanMatName]
+					local dropInfo = pickMaterialDrop(mat.name)
+					if dropInfo then
 						activeQuestMap = {
 							mode = dropInfo.mode,
 							world = dropInfo.world,
 							act = dropInfo.acts[#dropInfo.acts],
-							diff = "Hard",
+							diff = dropInfo.omitDifficulty and nil or dropInfo.difficulty,
 							isMat = true,
 							matName = mat.name,
 							maxCap = mat.total,
+							boss = dropInfo.boss,
+							isCorrupted = dropInfo.isCorrupted,
 						}
+						return true
 					end
-					return true
+
+					table.insert(
+						activeQuestTexts,
+						string.format("Evo: no known map drops %s, skipping...", mat.name)
+					)
+					return false
 				else
 					table.insert(activeQuestTexts, string.format("Evo Ready: %s x%d", targetName, targetQty))
 					local evolvedCount = 0
@@ -3267,40 +3736,44 @@ if isLobby then
 
 			if StatusParagraph then
 				if #activeQuestTexts > 0 then
-					StatusParagraph:SetDesc(
+					setParagraphDesc(
+						StatusParagraph,
+						"__status",
 						"Master Auto Farm system is ready.\n" .. table.concat(activeQuestTexts, "\n")
 					)
 				else
-					StatusParagraph:SetDesc("Master Auto Farm system is ready.")
+					setParagraphDesc(StatusParagraph, "__status", "Master Auto Farm system is ready.")
 				end
 			end
 
-			for i, cfg in ipairs(mapConfigs) do
-				local currentCap = util and util.data and util.data.caps and util.data.caps[cfg.capStr] or 0
-				local isFull = (currentCap >= cfg.mapData.cap)
-				local prio = tonumber(Options["Priority_" .. i].Value) or 0
-
-				local contentStr = string.format("Limit: %d / %d", currentCap, cfg.mapData.cap)
-				if isFull then
-					contentStr = contentStr .. " [FULL - SKIPPED]"
+			-- OPT: map limit paragraphs only need a UI refresh about every 9 seconds.
+			if _mainTick % 3 == 0 then
+				for i, cfg in ipairs(mapConfigs) do
+					local currentCap = util and util.data and util.data.caps and util.data.caps[cfg.capStr] or 0
+					local isFull = (currentCap >= cfg.mapData.cap)
+					local prio = tonumber(Options["Priority_" .. i].Value) or 0
+					local contentStr = string.format("Limit: %d / %d", currentCap, cfg.mapData.cap)
+					if isFull then
+						contentStr = contentStr .. " [FULL - SKIPPED]"
+					end
+					if prio == 0 then
+						contentStr = contentStr .. " [SKIPPED]"
+					end
+					setParagraphDesc(cfg.paragraph, "trait_" .. i, contentStr)
 				end
-				if prio == 0 then
-					contentStr = contentStr .. " [SKIPPED]"
+				for i, cfg in ipairs(prismMapConfigs) do
+					local currentCap = util and util.data and util.data.caps and util.data.caps[cfg.capStr] or 0
+					local isFull = (currentCap >= cfg.mapData.cap)
+					local prio = tonumber(Options["PrismPriority_" .. i].Value) or 0
+					local contentStr = string.format("Limit: %d / %d", currentCap, cfg.mapData.cap)
+					if isFull then
+						contentStr = contentStr .. " [FULL - SKIPPED]"
+					end
+					if prio == 0 then
+						contentStr = contentStr .. " [SKIPPED]"
+					end
+					setParagraphDesc(cfg.paragraph, "prism_" .. i, contentStr)
 				end
-				cfg.paragraph:SetDesc(contentStr)
-			end
-			for i, cfg in ipairs(prismMapConfigs) do
-				local currentCap = util and util.data and util.data.caps and util.data.caps[cfg.capStr] or 0
-				local isFull = (currentCap >= cfg.mapData.cap)
-				local prio = tonumber(Options["PrismPriority_" .. i].Value) or 0
-				local contentStr = string.format("Limit: %d / %d", currentCap, cfg.mapData.cap)
-				if isFull then
-					contentStr = contentStr .. " [FULL - SKIPPED]"
-				end
-				if prio == 0 then
-					contentStr = contentStr .. " [SKIPPED]"
-				end
-				cfg.paragraph:SetDesc(contentStr)
 			end
 
 			if
@@ -3309,16 +3782,18 @@ if isLobby then
 				and create_room
 				and not (Options.PartyMode and Options.PartyMode.Value and Options.PartyRole.Value == "Member")
 			then
-				local succ, challengeData = pcall(function()
-					return get_challenges:InvokeServer()
-				end)
+				local succ, challengeData = getCachedChallenges()
 				local joinedSomething = false
 
 				if succ and type(challengeData) == "table" then
-					if isfile and writefile then
-						pcall(function()
-							writefile(basePath .. "/LastSnipeCheck.txt", tostring(math.floor(os.time() / 1800)))
-						end)
+					local boundary = tostring(math.floor(os.time() / 1800))
+					if boundary ~= _lastSnipeBoundary then
+						_lastSnipeBoundary = boundary
+						if isfile and writefile then
+							pcall(function()
+								writefile(basePath .. "/LastSnipeCheck.txt", boundary)
+							end)
+						end
 					end
 				end
 
@@ -3352,6 +3827,13 @@ if isLobby then
 							Content = "Farming Material: " .. tostring(activeQuestMap.matName),
 							Duration = 3,
 						})
+						local matMods = nil
+						if activeQuestMap.isCorrupted then
+							matMods = getCorruptedModifiers()
+							if #matMods == 0 then
+								matMods = nil
+							end
+						end
 						joinRoom(
 							activeQuestMap.act,
 							activeQuestMap.diff,
@@ -3360,7 +3842,9 @@ if isLobby then
 							nil,
 							activeQuestMap.matName,
 							activeQuestMap.maxCap,
-							"Item"
+							"Item",
+							activeQuestMap.boss,
+							matMods
 						)
 					elseif activeQuestMap.mode == "Story" then
 						Fluent:Notify({
@@ -3456,7 +3940,7 @@ if isLobby then
 						and joinableMapTree[world][mode][difficulty][act]
 					if mapData then
 						local mods = nil
-						if mode == "Corrupted" then
+						if mapData.isCorrupted then
 							mods = getCorruptedModifiers()
 							if #mods == 0 then
 								mods = nil
@@ -3673,15 +4157,29 @@ else
 
 	_G.AnimeSquadronMainLoop = (_G.AnimeSquadronMainLoop or 0) + 1
 	local currentMainLoop = _G.AnimeSquadronMainLoop
+	local _lastIngameStatus = nil
+	local _lastIngameMapText = {}
+	local _ingameTick = 0
+	local _cachedWaveGui = nil
+	local _cachedBase = nil
+	local _lastAutoPlayRequest = 0
+	local _lastUltimateByTower = {}
+	local _lastSnipeCheckBoundary = 0
+	if isfile and readfile and isfile(basePath .. "/LastSnipeCheck.txt") then
+		pcall(function()
+			_lastSnipeCheckBoundary = tonumber(readfile(basePath .. "/LastSnipeCheck.txt")) or 0
+		end)
+	end
 	task.spawn(function()
 		while true do
 			if _G.AnimeSquadronMainLoop ~= currentMainLoop then
 				return
 			end
 			task.wait(2)
+			_ingameTick = _ingameTick + 1
 
+			local activeQuestTexts = {}
 			if Options.AutoQuest and Options.AutoQuest.Value and util and util.data and util.data.quests then
-				local activeQuestTexts = {}
 				for k, v in pairs(util.data.quests) do
 					if v.name ~= "Complete All" and v.name ~= "Weekly Complete All" then
 						if v.progress < v.required then
@@ -3732,11 +4230,14 @@ else
 				if #activeTexts > 0 then
 					fullText = fullText .. "\n" .. table.concat(activeTexts, "\n")
 				end
-				StatusParagraph:SetDesc(fullText)
+				if fullText ~= _lastIngameStatus then
+					_lastIngameStatus = fullText
+					StatusParagraph:SetDesc(fullText)
+				end
 			end
 
-			if Options.AutoSpeedToggle and Options.AutoSpeedToggle.Value then
-				pcall(function()
+
+			if _ingameTick % 5 == 0 and Options.AutoSpeedToggle and Options.AutoSpeedToggle.Value then				pcall(function()
 					local Event = game:GetService("ReplicatedStorage").Remotes.Game.change_speed
 					local res, msg = Event:InvokeServer(3)
 					if res == false and type(msg) == "string" and string.find(string.lower(msg), "pass") then
@@ -3745,7 +4246,8 @@ else
 				end)
 			end
 
-			if Options.AutoPlayToggle and Options.AutoPlayToggle.Value then
+			if Options.AutoPlayToggle and Options.AutoPlayToggle.Value and os.time() - _lastAutoPlayRequest >= 10 then
+				_lastAutoPlayRequest = os.time()
 				pcall(function()
 					if util and util.data and not util.data.autoplay then
 						local Event = game:GetService("ReplicatedStorage"):FindFirstChild("Remotes")
@@ -3763,24 +4265,26 @@ else
 			end
 
 			if Options.AutoUltimateToggle and Options.AutoUltimateToggle.Value then
-				local hasEnemy = false
-				if workspace:FindFirstChild("Enemies") and #workspace.Enemies:GetChildren() > 0 then
-					hasEnemy = true
-				end
-
-				if hasEnemy then
+				local enemies = workspace:FindFirstChild("Enemies")
+				if enemies and #enemies:GetChildren() > 0 then
 					local hotbar = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("Hotbar")
-					if hotbar and hotbar:FindFirstChild("BottomUI") and hotbar.BottomUI:FindFirstChild("Towers") then
-						for _, towerUi in pairs(hotbar.BottomUI.Towers:GetChildren()) do
+					local towers = hotbar and hotbar:FindFirstChild("BottomUI") and hotbar.BottomUI:FindFirstChild("Towers")
+					if towers then
+						local nowClock = os.clock()
+						for _, towerUi in ipairs(towers:GetChildren()) do
 							local btn = towerUi:FindFirstChild("Button")
 							if btn and btn:GetAttribute("ult") == true then
-								local startEvent = game:GetService("ReplicatedStorage").Remotes.Ultimates
-									:FindFirstChild("start")
-								if startEvent then
-									pcall(function()
-										startEvent:InvokeServer(towerUi.Name)
-									end)
-									task.wait(0.2)
+								local last = _lastUltimateByTower[towerUi.Name] or 0
+								if nowClock - last >= 2 then
+									_lastUltimateByTower[towerUi.Name] = nowClock
+									local startEvent = game:GetService("ReplicatedStorage").Remotes.Ultimates:FindFirstChild("start")
+									if startEvent then
+										task.spawn(function()
+											pcall(function()
+												startEvent:InvokeServer(towerUi.Name)
+											end)
+										end)
+									end
 								end
 							end
 						end
@@ -3790,7 +4294,10 @@ else
 
 			if Options.AutoReplayAtWave and Options.AutoReplayAtWave.Value and not isTeleporting then
 				pcall(function()
-					local waveGui = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("Wave", true)
+					if not _cachedWaveGui or not _cachedWaveGui.Parent then
+						_cachedWaveGui = game:GetService("Players").LocalPlayer.PlayerGui:FindFirstChild("Wave", true)
+					end
+					local waveGui = _cachedWaveGui
 					if waveGui then
 						local amountLbl = waveGui:FindFirstChild("Amount") or waveGui:FindFirstChild("WaveInfo")
 						if amountLbl and amountLbl:IsA("TextLabel") then
@@ -3818,19 +4325,23 @@ else
 				end)
 			end
 
-			if not isTeleporting and Options.AutoLeaveBaseFailsafe and Options.AutoLeaveBaseFailsafe.Value then
+			if not isTeleporting and Options.AutoLeaveBaseFailsafe and Options.AutoLeaveBaseFailsafe.Value and _ingameTick % 5 == 0 then
 				local baseDead = false
-				for _, v in pairs(workspace:GetDescendants()) do
-					if v.Name == "Base" or v.Name == "EnemyBase" or v.Name == "base" then
-						local hp = v:FindFirstChild("Health") or v:FindFirstChild("health") or v:FindFirstChild("HP")
-						if hp and (type(hp.Value) == "number") and hp.Value <= 0 then
-							baseDead = true
-							break
-						end
-						local hum = v:FindFirstChildOfClass("Humanoid")
+				if not _cachedBase or not _cachedBase.Parent then
+					_cachedBase = workspace:FindFirstChild("Base", true)
+						or workspace:FindFirstChild("EnemyBase", true)
+						or workspace:FindFirstChild("base", true)
+				end
+				local base = _cachedBase
+				if base and base.Parent then
+					local hp = base:FindFirstChild("Health") or base:FindFirstChild("health") or base:FindFirstChild("HP")
+					if hp and (type(hp.Value) == "number") and hp.Value <= 0 then
+						baseDead = true
+					end
+					if not baseDead then
+						local hum = base:FindFirstChildOfClass("Humanoid")
 						if hum and hum.Health <= 0 then
 							baseDead = true
-							break
 						end
 					end
 				end
@@ -3853,32 +4364,41 @@ else
 					baseZeroTime = nil
 				end
 			end
-			for i, cfg in ipairs(mapConfigs) do
-				local currentCap = util and util.data and util.data.caps and util.data.caps[cfg.capStr] or 0
-				local isFull = (currentCap >= cfg.mapData.cap)
-				local prio = tonumber(Options["Priority_" .. i].Value) or 0
-
-				local contentStr = string.format("Limit: %d / %d", currentCap, cfg.mapData.cap)
-				if isFull then
-					contentStr = contentStr .. " [FULL - SKIPPED]"
+			if _ingameTick % 5 == 0 then
+				for i, cfg in ipairs(mapConfigs) do
+					local currentCap = util and util.data and util.data.caps and util.data.caps[cfg.capStr] or 0
+					local isFull = (currentCap >= cfg.mapData.cap)
+					local prio = tonumber(Options["Priority_" .. i].Value) or 0
+					local contentStr = string.format("Limit: %d / %d", currentCap, cfg.mapData.cap)
+					if isFull then
+						contentStr = contentStr .. " [FULL - SKIPPED]"
+					end
+					if prio == 0 then
+						contentStr = contentStr .. " [SKIPPED]"
+					end
+					local key = "trait_" .. i
+					if _lastIngameMapText[key] ~= contentStr then
+						_lastIngameMapText[key] = contentStr
+						cfg.paragraph:SetDesc(contentStr)
+					end
 				end
-				if prio == 0 then
-					contentStr = contentStr .. " [SKIPPED]"
+				for i, cfg in ipairs(prismMapConfigs) do
+					local currentCap = util and util.data and util.data.caps and util.data.caps[cfg.capStr] or 0
+					local isFull = (currentCap >= cfg.mapData.cap)
+					local prio = tonumber(Options["PrismPriority_" .. i].Value) or 0
+					local contentStr = string.format("Limit: %d / %d", currentCap, cfg.mapData.cap)
+					if isFull then
+						contentStr = contentStr .. " [FULL - SKIPPED]"
+					end
+					if prio == 0 then
+						contentStr = contentStr .. " [SKIPPED]"
+					end
+					local key = "prism_" .. i
+					if _lastIngameMapText[key] ~= contentStr then
+						_lastIngameMapText[key] = contentStr
+						cfg.paragraph:SetDesc(contentStr)
+					end
 				end
-				cfg.paragraph:SetDesc(contentStr)
-			end
-			for i, cfg in ipairs(prismMapConfigs) do
-				local currentCap = util and util.data and util.data.caps and util.data.caps[cfg.capStr] or 0
-				local isFull = (currentCap >= cfg.mapData.cap)
-				local prio = tonumber(Options["PrismPriority_" .. i].Value) or 0
-				local contentStr = string.format("Limit: %d / %d", currentCap, cfg.mapData.cap)
-				if isFull then
-					contentStr = contentStr .. " [FULL - SKIPPED]"
-				end
-				if prio == 0 then
-					contentStr = contentStr .. " [SKIPPED]"
-				end
-				cfg.paragraph:SetDesc(contentStr)
 			end
 
 			if
@@ -3888,14 +4408,7 @@ else
 				and Options.SniperSyncMode.Value == "Instant (Abort Match)"
 			then
 				local currentBoundary = math.floor(os.time() / 1800)
-				local lastCheck = 0
-				if isfile and readfile and isfile(basePath .. "/LastSnipeCheck.txt") then
-					pcall(function()
-						lastCheck = tonumber(readfile(basePath .. "/LastSnipeCheck.txt")) or 0
-					end)
-				end
-
-				if currentBoundary > lastCheck then
+				if currentBoundary > _lastSnipeCheckBoundary then
 					forceTeleportToLobby("Sniper Sync", "New 30m window! Instant aborting to check challenges...")
 				end
 			end
@@ -3951,13 +4464,7 @@ else
 						and Options.SniperSyncMode.Value == "Safe (At EndScreen)"
 					then
 						local currentBoundary = math.floor(os.time() / 1800)
-						local lastCheck = 0
-						if isfile and readfile and isfile(basePath .. "/LastSnipeCheck.txt") then
-							pcall(function()
-								lastCheck = tonumber(readfile(basePath .. "/LastSnipeCheck.txt")) or 0
-							end)
-						end
-						if currentBoundary > lastCheck then
+						if currentBoundary > _lastSnipeCheckBoundary then
 							forceTeleportToLobby("Sniper Sync", "New 30m window! Returning to lobby for challenges...")
 						end
 					end
@@ -4063,10 +4570,12 @@ task.spawn(function()
 		if _G.AnimeSquadronStatsLoop ~= currentStatsLoop then
 			return
 		end
-		task.wait(5)
-		pcall(function()
-			util = require(game:GetService("Players").LocalPlayer.PlayerScripts.Client.Utility)
-		end)
+		task.wait(10)
+		if not util then
+			pcall(function()
+				util = require(game:GetService("Players").LocalPlayer.PlayerScripts.Client.Utility)
+			end)
+		end
 		if util and util.data and util.data.stats then
 			local currentItems = {}
 			local statKeys = { "Gold", "Gems", "Trait Shards", "Perfect Cubes", "Reroll Cubes" }
