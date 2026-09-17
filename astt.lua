@@ -4,12 +4,6 @@ end
 
 local LP = game:GetService("Players").LocalPlayer
 local guiLoaded = LP:WaitForChild("PlayerGui", 30)
-local scriptsLoaded = LP:WaitForChild("Plif not game:IsLoaded() then
-	game.Loaded:Wait()
-end
-
-local LP = game:GetService("Players").LocalPlayer
-local guiLoaded = LP:WaitForChild("PlayerGui", 30)
 local scriptsLoaded = LP:WaitForChild("PlayerScripts", 30)
 local clientLoaded = scriptsLoaded and scriptsLoaded:WaitForChild("Client", 30)
 local utilLoaded = clientLoaded and clientLoaded:WaitForChild("Utility", 30)
