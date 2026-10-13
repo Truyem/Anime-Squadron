@@ -451,16 +451,62 @@ end
 ensureEventModules()
 rebuildJoinableData()
 
+local function dedupTraitMaps(list)
+	if type(list) ~= "table" then
+		return list
+	end
+	local seen = {}
+	local out = {}
+	for _, m in ipairs(list) do
+		if type(m) == "table" and m.world and m.mode and m.act then
+			local key = tostring(m.mode) .. "|" .. tostring(m.world) .. "|" .. tostring(m.act)
+			if not seen[key] then
+				seen[key] = true
+				table.insert(out, m)
+			end
+		else
+			table.insert(out, m)
+		end
+	end
+	return out
+end
+
 if isLobby then
 	if commonWorldsLoaded then
-		for _, drop in ipairs(collectWorldDrops()) do
-			if drop.rewards["Trait Shards"] and type(drop.rewards["Trait Shards"]) == "table" and drop.rewards["Trait Shards"].cap then
-				table.insert(traitMaps, {
-					world = drop.world,
-					mode = drop.mode,
-					act = drop.act,
-					cap = drop.rewards["Trait Shards"].cap,
-				})
+		do
+			local seenTraitKeys = {}
+			for _, drop in ipairs(collectWorldDrops()) do
+				if drop.rewards["Trait Shards"] and type(drop.rewards["Trait Shards"]) == "table" and drop.rewards["Trait Shards"].cap then
+					-- DEDUP: collectWorldDrops() yields one entry per difficulty (Normal+Hard).
+					-- Old code ignored difficulty and inserted 2 identical rows for the same
+					-- world/mode/act (same capStr), causing UI duplicates like
+					-- "[Event] The Lava Continent (Act 4)" x2. Keep one row per map.
+					local key = tostring(drop.mode) .. "|" .. tostring(drop.world) .. "|" .. tostring(drop.act)
+					if not seenTraitKeys[key] then
+						seenTraitKeys[key] = true
+						table.insert(traitMaps, {
+							world = drop.world,
+							mode = drop.mode,
+							act = drop.act,
+							difficulty = drop.difficulty,
+							difficulties = { drop.difficulty },
+							cap = drop.rewards["Trait Shards"].cap,
+						})
+					else
+						for _, m in ipairs(traitMaps) do
+							if tostring(m.mode) .. "|" .. tostring(m.world) .. "|" .. tostring(m.act) == key then
+								m.difficulties = m.difficulties or {}
+								if not table.find(m.difficulties, drop.difficulty) then
+									table.insert(m.difficulties, drop.difficulty)
+								end
+								if type(drop.rewards["Trait Shards"].cap) == "number" and drop.rewards["Trait Shards"].cap > (m.cap or 0) then
+									m.cap = drop.rewards["Trait Shards"].cap
+								end
+								break
+							end
+						end
+					end
+				end
 			end
 		end
 		table.sort(traitMaps, function(a, b)
@@ -541,7 +587,7 @@ if isLobby then
 					return HttpService:JSONDecode(readfile(basePath .. "/MapsCache.json"))
 				end)
 				if succ2 and type(data2) == "table" then
-					traitMaps = data2
+					traitMaps = dedupTraitMaps(data2)
 				end
 			end
 		end
@@ -560,7 +606,7 @@ else
 				return HttpService:JSONDecode(readfile(basePath .. "/MapsCache.json"))
 			end)
 			if succ and type(data) == "table" then
-				traitMaps = data
+				traitMaps = dedupTraitMaps(data)
 			end
 		end
 	end
@@ -3980,15 +4026,32 @@ if isLobby then
 								.. ")",
 							Duration = 3,
 						})
-						joinRoom(
-							targetData.cfg.mapData.act,
-							targetData.difficulty,
-							targetData.cfg.mapData.mode,
-							targetData.cfg.mapData.world,
-							nil,
-							targetData.cfg.capStr,
-							targetData.cfg.mapData.cap
-						)
+						do
+							local w = targetData.cfg.mapData.world
+							local m = targetData.cfg.mapData.mode
+							local a = targetData.cfg.mapData.act
+							local wantDiff = targetData.difficulty
+							pcall(function()
+								local tree = joinableMapTree[w] and joinableMapTree[w][m]
+								if tree and not (tree[wantDiff] and tree[wantDiff][a]) then
+									for diff, acts in pairs(tree) do
+										if type(acts) == "table" and acts[a] then
+											wantDiff = diff
+											break
+										end
+									end
+								end
+							end)
+							joinRoom(
+								a,
+								wantDiff,
+								m,
+								w,
+								nil,
+								targetData.cfg.capStr,
+								targetData.cfg.mapData.cap
+							)
+						end
 					elseif Options.AutoPrism and Options.AutoPrism.Value then
 						local prismData = nil
 						local sortedPrism = getSortedValidPrismMaps()
