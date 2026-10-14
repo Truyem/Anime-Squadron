@@ -256,15 +256,61 @@ local function collectWorldDrops()
 
 						for difficulty, acts in pairs(v1) do
 							if type(acts) == "table" then
-								for act, rewards in pairs(acts) do
-									if type(act) == "number" and type(rewards) == "table" then
-										table.insert(drops, {
-											world = tostring(worldName),
-											mode = tostring(k1),
-											difficulty = tostring(difficulty),
-											act = act,
-											rewards = rewards,
-										})
+								local hasNumericAct = false
+								for ak in pairs(acts) do
+									if type(ak) == "number" then
+										hasNumericAct = true
+										break
+									end
+								end
+								if hasNumericAct then
+									for act, rewards in pairs(acts) do
+										if type(act) == "number" and type(rewards) == "table" then
+											table.insert(drops, {
+												world = tostring(worldName),
+												mode = tostring(k1),
+												difficulty = tostring(difficulty),
+												act = act,
+												rewards = rewards,
+											})
+										end
+									end
+								else
+									-- Single-act shape (World_Acts single_act=true, e.g. Katakara Bridge,
+									-- The Hero Hunter): rewards[mode][difficulty] IS the rewards table.
+									-- Act IDs come from the game (World_Acts.get_act_count), not hardcoded.
+									local looksLikeRewards = false
+									for _, iv in pairs(acts) do
+										if type(iv) == "table" and (iv.chance ~= nil or iv.cap ~= nil or iv.amount ~= nil) then
+											looksLikeRewards = true
+											break
+										end
+									end
+									if looksLikeRewards then
+										local actCount = nil
+										pcall(function()
+											local WA = require(game:GetService("ReplicatedStorage").Common.World_Acts)
+											if WA and type(WA.get_act_count) == "function" then
+												local n = WA.get_act_count(
+													tostring(worldName),
+													tostring(k1),
+													tostring(difficulty)
+												)
+												if type(n) == "number" and n >= 1 then
+													actCount = math.floor(n)
+												end
+											end
+										end)
+										for act = 1, (actCount or 1) do
+											table.insert(drops, {
+												world = tostring(worldName),
+												mode = tostring(k1),
+												difficulty = tostring(difficulty),
+												act = act,
+												singleAct = true,
+												rewards = acts,
+											})
+										end
 									end
 								end
 							end
